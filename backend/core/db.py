@@ -1,5 +1,5 @@
 from pathlib import Path
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
 from typing import Generator
 
@@ -38,3 +38,28 @@ def init_db() -> None:
     from backend.modules import tasks, goals, schedule, workouts, finance, projects  # noqa: F401
     from backend.modules.projects import models as _project_models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+    _apply_lightweight_migrations()
+
+
+def _apply_lightweight_migrations() -> None:
+    """Add new columns to existing SQLite tables without dropping data.
+
+    SQLAlchemy's create_all is idempotent for tables but won't add columns to
+    existing ones. For the small handful of additive changes we make, this is
+    enough — anything more complex should use Alembic.
+    """
+    if not _url.startswith("sqlite"):
+        return
+    additions = {
+        "events": [
+            ("category",     "VARCHAR(32) DEFAULT 'general'"),
+            ("completed",    "BOOLEAN DEFAULT 0"),
+            ("duration_min", "INTEGER"),
+        ],
+    }
+    with engine.begin() as conn:
+        for table, cols in additions.items():
+            existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}
+            for name, ddl in cols:
+                if name not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))

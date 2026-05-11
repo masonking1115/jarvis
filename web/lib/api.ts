@@ -19,7 +19,17 @@ export const api = {
 
 export type Task = { id: number; title: string; notes: string|null; priority: number; done: boolean; due_at: string|null; created_at: string };
 export type Goal = { id: number; title: string; category: string; notes: string|null; progress: number; target_date: string|null; created_at: string };
-export type Event = { id: number; title: string; starts_at: string; ends_at: string|null; location: string|null; notes: string|null };
+export type Event = {
+  id: number;
+  title: string;
+  starts_at: string;
+  ends_at: string | null;
+  duration_min: number | null;
+  category: string;          // workout | deep_work | meal | study | review | meeting | routine | personal | general
+  completed: boolean;
+  location: string | null;
+  notes: string | null;
+};
 export type Workout = { id: number; kind: string; duration_min: number; distance_mi: number|null; notes: string|null; performed_at: string };
 export type Txn = { id: number; amount: number; category: string; description: string|null; occurred_at: string };
 export type Project = { id: number; name: string; status: string; progress: number; notion_url: string|null; notes: string|null; created_at: string };

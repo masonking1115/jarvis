@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
-import { api, Task, Goal, Event, FinanceSummary, ChatReply, Project } from "@/lib/api";
+import { api, Goal, Event, FinanceSummary, ChatReply, Project } from "@/lib/api";
 import { Panel } from "@/components/Panel";
 import { StatusPill, Status } from "@/components/StatusPill";
 import { Ring } from "@/components/Ring";
 import { Sparkline } from "@/components/Sparkline";
+import { CategoryIcon } from "@/components/CategoryIcon";
 
 type Fitness = {
   placeholder: boolean;
@@ -20,7 +21,6 @@ type Analytics = {
 type Agents = { placeholder: boolean; agents: { name: string; status: string; role: string }[] };
 
 export default function Dashboard() {
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [fin, setFin] = useState<FinanceSummary | null>(null);
@@ -33,8 +33,7 @@ export default function Dashboard() {
   const [chatBusy, setChatBusy] = useState(false);
 
   async function refresh() {
-    const [t, g, e, f, fit, an, pr, ag] = await Promise.all([
-      api.get<Task[]>("/api/tasks"),
+    const [g, e, f, fit, an, pr, ag] = await Promise.all([
       api.get<Goal[]>("/api/goals"),
       api.get<Event[]>("/api/schedule/today"),
       api.get<FinanceSummary>("/api/finance/summary"),
@@ -43,10 +42,15 @@ export default function Dashboard() {
       api.get<Project[]>("/api/projects"),
       api.get<Agents>("/api/agents"),
     ]);
-    setTasks(t); setGoals(g); setEvents(e); setFin(f);
+    setGoals(g); setEvents(e); setFin(f);
     setFitness(fit); setAnalytics(an); setProjects(pr); setAgents(ag);
   }
   useEffect(() => { refresh().catch(console.error); }, []);
+
+  async function toggleEvent(ev: Event) {
+    await api.patch(`/api/schedule/${ev.id}`, { completed: !ev.completed });
+    refresh();
+  }
 
   async function sendChat(e: React.FormEvent) {
     e.preventDefault();
@@ -65,7 +69,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-12 gap-4">
         <Panel title="Today" href="/schedule" hrefLabel="View full schedule"
                className="col-span-12 xl:col-span-3">
-          <TodayList events={events} tasks={tasks} />
+          <TodayList events={events} onToggle={toggleEvent} />
         </Panel>
 
         <Panel title="Goals & Progress" href="/goals" hrefLabel="View all goals"
@@ -120,33 +124,45 @@ export default function Dashboard() {
 
 /* ---------------- subcomponents ---------------- */
 
-function TodayList({ events, tasks }: { events: Event[]; tasks: Task[] }) {
-  const items = [
-    ...events.map(e => ({
-      key: `e${e.id}`,
-      time: new Date(e.starts_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
-      title: e.title, sub: e.location ?? "", color: "#4ad6ff",
-    })),
-    ...tasks.slice(0, 6).map(t => ({
-      key: `t${t.id}`,
-      time: t.due_at ? new Date(t.due_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : `P${t.priority}`,
-      title: t.title, sub: t.notes ?? "", color: t.priority <= 2 ? "#ff9c2a" : "#22e8a0",
-    })),
-  ];
-  if (items.length === 0) return <Empty text="No events or tasks for today." />;
+function TodayList({ events, onToggle }: { events: Event[]; onToggle: (e: Event) => void }) {
+  if (events.length === 0) {
+    return (
+      <div className="text-[12px] text-jarvis-muted italic">
+        Nothing planned. Open <span className="text-jarvis-accent">Schedule</span> to plan your day.
+      </div>
+    );
+  }
   return (
     <ul className="space-y-2.5">
-      {items.slice(0, 6).map(i => (
-        <li key={i.key} className="flex items-start gap-3 text-sm">
-          <span className="numeric text-[11px] text-jarvis-muted w-10 shrink-0 mt-0.5 tabular-nums">{i.time}</span>
-          <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0"
-                style={{ background: i.color, boxShadow: `0 0 6px ${i.color}` }} />
-          <div className="flex-1 min-w-0">
-            <div className="truncate text-jarvis-text text-[13px]">{i.title}</div>
-            {i.sub && <div className="text-[11px] text-jarvis-muted truncate">{i.sub}</div>}
-          </div>
-        </li>
-      ))}
+      {events.slice(0, 6).map(e => {
+        const time = new Date(e.starts_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        return (
+          <li key={e.id} className="flex items-center gap-3">
+            <span className="numeric text-[11px] text-jarvis-muted w-12 shrink-0 tabular-nums">{time}</span>
+            <CategoryIcon category={e.category} size={32} />
+            <div className="flex-1 min-w-0">
+              <div className={`truncate text-[13px] font-ui tracking-wide ${e.completed ? "line-through text-jarvis-muted" : "text-jarvis-text"}`}>
+                {e.title}
+              </div>
+              <div className="text-[10px] text-jarvis-muted tracking-wider">
+                {e.duration_min ? `${e.duration_min} MIN` : ""}
+                {e.duration_min && e.notes ? " · " : ""}
+                {e.notes ?? ""}
+              </div>
+            </div>
+            <button
+              onClick={() => onToggle(e)}
+              className={`w-5 h-5 rounded-full border flex items-center justify-center text-[11px] transition-colors ${
+                e.completed
+                  ? "bg-jarvis-good/20 border-jarvis-good text-jarvis-good"
+                  : "border-jarvis-border text-jarvis-muted hover:border-jarvis-accent"
+              }`}
+              title={e.completed ? "Mark incomplete" : "Mark complete"}>
+              {e.completed ? "✓" : ""}
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }
