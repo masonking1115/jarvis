@@ -10,32 +10,37 @@ export function HeaderBar() {
   }, []);
 
   return (
-    <header className="border-b border-jarvis-border bg-jarvis-panel/40 backdrop-blur">
-      <div className="px-8 py-4 flex items-center justify-between">
-        <div>
-          <div className="text-lg font-bold tracking-wider">
-            JARVIS <span className="text-jarvis-accent">CONSOLE</span>
+    <header className="border-b border-jarvis-border bg-[#040813]/60 backdrop-blur">
+      <div className="px-7 py-4 flex items-center justify-between">
+        {/* Left: brand wordmark + status */}
+        <div className="flex items-center gap-5">
+          <div>
+            <div className="font-display font-bold text-[22px] tracking-[0.22em] text-jarvis-text leading-none drop-shadow-[0_0_10px_rgba(74,214,255,0.35)]">
+              JARVIS <span className="text-jarvis-accent">CONSOLE</span>
+            </div>
+            <div className="font-ui text-[11px] tracking-[0.32em] text-jarvis-muted mt-1.5">
+              CENTRAL LIFE OPTIMIZATION SYSTEM
+            </div>
           </div>
-          <div className="text-[11px] text-jarvis-muted tracking-[0.18em] uppercase">
-            Central Life Optimization System
-          </div>
+          <span className="pill text-jarvis-good">
+            <span className="dot dot-good" /> OPTIMAL
+          </span>
         </div>
 
-        <div className="flex items-center gap-8">
+        {/* Right: clock + date + tagline */}
+        <div className="flex items-center gap-7">
           <div className="text-right">
-            <div className="font-mono text-2xl text-jarvis-text leading-none tabular-nums">
-              {now ? now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--:--"}
+            <div className="numeric font-bold text-[34px] leading-none tracking-tight text-jarvis-text drop-shadow-[0_0_12px_rgba(74,214,255,0.4)]">
+              {now ? now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : "--:--"}
             </div>
-            <div className="text-[11px] text-jarvis-muted mt-1">
-              {now ? now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" }) : ""}
+            <div className="font-ui text-[11px] tracking-[0.22em] text-jarvis-muted mt-1.5 uppercase">
+              {now ? now.toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" }) : "—"}
             </div>
           </div>
-
-          <div className="flex flex-col items-end gap-1">
-            <span className="inline-flex items-center gap-2 text-xs font-semibold text-jarvis-good">
-              <span className="dot dot-good" /> OPTIMAL
-            </span>
-            <div className="text-[11px] text-jarvis-muted italic">"Focus is the multiplier."</div>
+          <div className="hidden md:block w-px h-10 bg-jarvis-border" />
+          <div className="hidden md:flex flex-col items-end">
+            <span className="font-ui text-[10px] tracking-[0.28em] text-jarvis-muted">DIRECTIVE</span>
+            <span className="font-ui italic text-[13px] text-jarvis-text">"Focus is the multiplier."</span>
           </div>
         </div>
       </div>

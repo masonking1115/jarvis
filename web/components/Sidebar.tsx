@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { JarvisLogo } from "./JarvisLogo";
 
 const NAV = [
   { href: "/",          label: "Dashboard" },
@@ -18,38 +19,46 @@ const NAV = [
 export function Sidebar() {
   const pathname = usePathname();
   return (
-    <aside className="w-56 shrink-0 border-r border-jarvis-border bg-jarvis-panel/60 backdrop-blur min-h-screen flex flex-col">
-      <div className="px-5 py-5 border-b border-jarvis-border">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md bg-jarvis-accent/20 border border-jarvis-accent flex items-center justify-center text-jarvis-accent font-bold">J</div>
-          <div>
-            <div className="font-bold tracking-wide">JARVIS</div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-jarvis-muted">Console</div>
-          </div>
+    <aside className="w-56 shrink-0 border-r border-jarvis-border bg-[#040813]/70 backdrop-blur min-h-screen flex flex-col">
+      {/* Top: brand mark */}
+      <div className="px-5 pt-5 pb-3 flex items-center gap-3">
+        <JarvisLogo size={28} />
+        <div>
+          <div className="font-display font-bold text-[15px] tracking-[0.18em] text-jarvis-text leading-none">JARVIS</div>
+          <div className="font-ui text-[10px] tracking-[0.28em] text-jarvis-muted mt-1">CONSOLE</div>
         </div>
       </div>
 
-      <nav className="flex-1 py-4">
+      <div className="mx-5 my-2 h-px bg-gradient-to-r from-transparent via-jarvis-border to-transparent" />
+
+      <nav className="flex-1 py-2">
         {NAV.map(n => {
           const active = n.href === "/" ? pathname === "/" : pathname?.startsWith(n.href);
           return (
             <Link key={n.href} href={n.href}
-              className={`flex items-center gap-3 px-5 py-2 text-sm border-l-2 ${
+              className={`relative flex items-center gap-3 pl-5 pr-4 py-2 text-[13px] font-ui tracking-wider ${
                 active
-                  ? "border-jarvis-accent bg-jarvis-accent/10 text-jarvis-text"
-                  : "border-transparent text-jarvis-muted hover:text-jarvis-text hover:bg-white/5"
+                  ? "text-jarvis-text"
+                  : "text-jarvis-dim hover:text-jarvis-text"
               }`}>
-              <span className={`dot ${active ? "dot-info" : "bg-jarvis-dim"}`} />
-              {n.label}
+              {active && (
+                <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-jarvis-accent shadow-[0_0_8px_rgba(74,214,255,0.9)]" />
+              )}
+              <span className={`dot ${active ? "dot-info" : "bg-jarvis-mute2"}`} />
+              <span className={active ? "drop-shadow-[0_0_8px_rgba(74,214,255,0.5)]" : ""}>{n.label}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="px-5 py-4 border-t border-jarvis-border text-[11px] text-jarvis-muted">
-        <div className="flex items-center justify-between">
-          <span>JARVIS v0.1</span>
-          <span className="inline-flex items-center gap-1.5"><span className="dot dot-good" />Online</span>
+      {/* Footer: JARVIS Online + bigger emblem like the screenshot */}
+      <div className="px-5 pb-5 pt-3 border-t border-jarvis-border">
+        <div className="flex items-center gap-3">
+          <JarvisLogo size={44} />
+          <div>
+            <div className="font-display text-jarvis-accent text-[13px] tracking-[0.22em] leading-none drop-shadow-[0_0_8px_rgba(74,214,255,0.6)]">JARVIS</div>
+            <div className="font-ui text-[10px] tracking-[0.28em] text-jarvis-muted mt-1">ONLINE</div>
+          </div>
         </div>
       </div>
     </aside>
