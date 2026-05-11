@@ -35,5 +35,6 @@ def get_db() -> Generator[Session, None, None]:
 
 def init_db() -> None:
     # Import all module models so Base.metadata sees them
-    from backend.modules import tasks, goals, schedule, workouts, finance  # noqa: F401
+    from backend.modules import tasks, goals, schedule, workouts, finance, projects  # noqa: F401
+    from backend.modules.projects import models as _project_models  # noqa: F401
     Base.metadata.create_all(bind=engine)

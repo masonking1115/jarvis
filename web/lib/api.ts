@@ -22,5 +22,6 @@ export type Goal = { id: number; title: string; category: string; notes: string|
 export type Event = { id: number; title: string; starts_at: string; ends_at: string|null; location: string|null; notes: string|null };
 export type Workout = { id: number; kind: string; duration_min: number; distance_mi: number|null; notes: string|null; performed_at: string };
 export type Txn = { id: number; amount: number; category: string; description: string|null; occurred_at: string };
+export type Project = { id: number; name: string; status: string; progress: number; notion_url: string|null; notes: string|null; created_at: string };
 export type FinanceSummary = { income: number; expenses: number; net: number; count: number };
 export type ChatReply = { reply: string; provider: string };

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { api, Task, Goal, Event, FinanceSummary, ChatReply } from "@/lib/api";
+import { api, Task, Goal, Event, FinanceSummary, ChatReply, Project } from "@/lib/api";
 import { Panel } from "@/components/Panel";
 import { StatusPill, Status } from "@/components/StatusPill";
 import { Ring } from "@/components/Ring";
@@ -17,7 +17,6 @@ type Analytics = {
   metrics: { name: string; value: number; unit: string; color: string; series: number[] }[];
   net_worth_series: number[];
 };
-type Projects = { placeholder: boolean; projects: { name: string; status: string; progress: number }[] };
 type Agents = { placeholder: boolean; agents: { name: string; status: string; role: string }[] };
 
 export default function Dashboard() {
@@ -27,7 +26,7 @@ export default function Dashboard() {
   const [fin, setFin] = useState<FinanceSummary | null>(null);
   const [fitness, setFitness] = useState<Fitness | null>(null);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
-  const [projects, setProjects] = useState<Projects | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [agents, setAgents] = useState<Agents | null>(null);
   const [chatLog, setChatLog] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -41,7 +40,7 @@ export default function Dashboard() {
       api.get<FinanceSummary>("/api/finance/summary"),
       api.get<Fitness>("/api/fitness/today"),
       api.get<Analytics>("/api/analytics/overview"),
-      api.get<Projects>("/api/projects"),
+      api.get<Project[]>("/api/projects"),
       api.get<Agents>("/api/agents"),
     ]);
     setTasks(t); setGoals(g); setEvents(e); setFin(f);
@@ -98,7 +97,6 @@ export default function Dashboard() {
         </Panel>
 
         <Panel title="Projects" href="/projects" hrefLabel="View all projects"
-               demo={projects?.placeholder}
                className="col-span-12 md:col-span-6 xl:col-span-3">
           <ProjectsBlock projects={projects} />
         </Panel>
@@ -253,24 +251,58 @@ function FinanceBlock({ fin, series }: { fin: FinanceSummary | null; series: num
   );
 }
 
-function ProjectsBlock({ projects }: { projects: Projects | null }) {
-  if (!projects) return <Empty text="Loading…" />;
+function ProjectsBlock({ projects }: { projects: Project[] }) {
+  if (projects.length === 0) return <Empty text="No projects." />;
   return (
     <ul className="space-y-2.5">
-      {projects.projects.map(p => (
-        <li key={p.name} className="flex items-center gap-3 text-[13px]">
-          <span className="flex-1 truncate font-ui tracking-wide">{p.name}</span>
-          <span className="w-20 h-1 bg-jarvis-bg2 rounded-full overflow-hidden border border-jarvis-border">
-            <span className="block h-full" style={{
-              width: `${p.progress*100}%`,
-              background: "linear-gradient(90deg, #4ad6ff, #5be1ff)",
-              boxShadow: "0 0 6px rgba(74,214,255,0.5)",
-            }} />
-          </span>
-          <StatusPill status={p.status === "active" ? "active" : p.status === "paused" ? "warn" : "ready"} />
+      {projects.map(p => {
+        const inner = (
+          <>
+            <span className="flex-1 truncate font-ui tracking-wide flex items-center gap-1.5">
+              {p.name}
+              {p.notion_url && <NotionIcon />}
+            </span>
+            <span className="w-20 h-1 bg-jarvis-bg2 rounded-full overflow-hidden border border-jarvis-border">
+              <span className="block h-full" style={{
+                width: `${p.progress*100}%`,
+                background: "linear-gradient(90deg, #4ad6ff, #5be1ff)",
+                boxShadow: "0 0 6px rgba(74,214,255,0.5)",
+              }} />
+            </span>
+            <StatusPill status={p.status === "active" ? "active" : p.status === "paused" ? "warn" : "ready"} />
+          </>
+        );
+        return (
+          <li key={p.id} className="text-[13px]">
+            {p.notion_url ? (
+              <a href={p.notion_url} target="_blank" rel="noreferrer"
+                 className="flex items-center gap-3 hover:bg-white/[0.03] rounded-md -mx-1 px-1 py-0.5 transition-colors">
+                {inner}
+              </a>
+            ) : (
+              <div className="flex items-center gap-3" title="No Notion page linked yet">
+                {inner}
+              </div>
+            )}
+          </li>
+        );
+      })}
+      {projects.find(p => !p.notion_url) && (
+        <li className="text-[10px] text-jarvis-muted font-ui tracking-wider pt-1">
+          Tip: open /projects to link a Notion page.
         </li>
-      ))}
+      )}
     </ul>
+  );
+}
+
+function NotionIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+         className="text-jarvis-accent shrink-0" aria-label="Notion">
+      <path d="M5 4h11l4 3v13H5V4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M16 4v3h4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
   );
 }
 

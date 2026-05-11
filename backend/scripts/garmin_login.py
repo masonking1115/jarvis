@@ -1,4 +1,4 @@
-"""One-time Garmin Connect login.
+r"""One-time Garmin Connect login.
 
 Reads GARMIN_EMAIL / GARMIN_PASSWORD from backend/.env, logs in (prompting for
 an MFA code if your account has 2FA enabled), and caches a session token under
