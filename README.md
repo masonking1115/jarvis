@@ -54,6 +54,38 @@ Open http://localhost:3000.
 - **Finance** — transactions + income/expense/net summary.
 - **Chat** — talk to Jarvis. The system prompt includes your open tasks and goals as context, so it can give grounded recommendations.
 
+## Connecting Garmin Connect
+
+The `garmin` module reads from Garmin Connect via the unofficial
+[`garminconnect`](https://github.com/cyberjunky/python-garminconnect) library.
+Your credentials are stored locally and never leave your machine.
+
+**One-time setup:**
+
+1. Add to `backend/.env`:
+   ```
+   GARMIN_EMAIL=you@example.com
+   GARMIN_PASSWORD=your-password
+   ```
+2. From the project root, run the login helper:
+   ```powershell
+   .\.venv\Scripts\python.exe -m backend.scripts.garmin_login
+   ```
+   If your account has 2FA, it'll prompt you for the code. A session token
+   gets cached to `data/garmin_token/` so the password isn't needed at
+   runtime after this.
+3. Restart the backend. `/api/garmin/*` endpoints now return real data,
+   and the Fitness card switches from `DEMO` to `GARMIN` automatically.
+
+**Endpoints:** `/api/garmin/status`, `/today`, `/sleep`, `/readiness`,
+`/vo2`, `/body_battery`, `/activities`. All endpoints degrade gracefully —
+if the token is missing or rejected, they return `{available: false, reason: ...}`
+instead of erroring.
+
+**Caveat:** `garminconnect` is unofficial. Garmin can change their internal
+endpoints at any time and break the library; pinning to a specific version
+in `requirements.txt` reduces but doesn't eliminate the risk.
+
 ## Roadmap to iOS
 
 The FastAPI backend is provider-neutral and already speaks JSON over HTTP. To go iOS:

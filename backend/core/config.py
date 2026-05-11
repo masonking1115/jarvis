@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/jarvis.db"
     cors_origins: str = "http://localhost:3000"
 
+    garmin_email: str = ""
+    garmin_password: str = ""
+    garmin_token_dir: str = "./data/garmin_token"
+
     @property
     def cors_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
