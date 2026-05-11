@@ -1,0 +1,26 @@
+// Thin fetch wrapper. The Next.js dev server proxies /api/* to FastAPI on :8000.
+async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+export const api = {
+  get:    <T>(p: string)             => req<T>(p),
+  post:   <T>(p: string, body: any)  => req<T>(p, { method: "POST", body: JSON.stringify(body) }),
+  patch:  <T>(p: string, body: any)  => req<T>(p, { method: "PATCH", body: JSON.stringify(body) }),
+  del:    <T>(p: string)             => req<T>(p, { method: "DELETE" }),
+};
+
+export type Task = { id: number; title: string; notes: string|null; priority: number; done: boolean; due_at: string|null; created_at: string };
+export type Goal = { id: number; title: string; category: string; notes: string|null; progress: number; target_date: string|null; created_at: string };
+export type Event = { id: number; title: string; starts_at: string; ends_at: string|null; location: string|null; notes: string|null };
+export type Workout = { id: number; kind: string; duration_min: number; distance_mi: number|null; notes: string|null; performed_at: string };
+export type Txn = { id: number; amount: number; category: string; description: string|null; occurred_at: string };
+export type FinanceSummary = { income: number; expenses: number; net: number; count: number };
+export type ChatReply = { reply: string; provider: string };

@@ -1,0 +1,84 @@
+from datetime import datetime
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from backend.core.db import get_db
+from backend.core.llm import get_provider
+from backend.modules.tasks.models import Task
+from backend.modules.goals.models import Goal
+
+
+router = APIRouter()
+
+
+class ChatMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+    provider: str | None = None  # optional override: "anthropic" | "openai"
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    provider: str
+
+
+SYSTEM_PROMPT = (
+    "You are Jarvis, the user's personal life-optimization assistant. "
+    "Be concise, direct, and proactive. Use the user's tasks and goals (provided below) "
+    "as context. When the user asks for plans or recommendations, ground them in that data. "
+    "If you don't have relevant data, say so plainly."
+)
+
+
+def _build_context(db: Session) -> str:
+    open_tasks = (
+        db.query(Task).filter(Task.done == False)  # noqa: E712
+        .order_by(Task.priority.asc()).limit(20).all()
+    )
+    goals = db.query(Goal).order_by(Goal.created_at.desc()).limit(20).all()
+
+    lines = [f"# Context as of {datetime.now().isoformat(timespec='minutes')}", "", "## Open tasks"]
+    if open_tasks:
+        for t in open_tasks:
+            due = f" (due {t.due_at.date()})" if t.due_at else ""
+            lines.append(f"- [P{t.priority}] {t.title}{due}")
+    else:
+        lines.append("- (none)")
+
+    lines += ["", "## Goals"]
+    if goals:
+        for g in goals:
+            tgt = f" — target {g.target_date.date()}" if g.target_date else ""
+            lines.append(f"- [{g.category}] {g.title} ({int(g.progress * 100)}%){tgt}")
+    else:
+        lines.append("- (none)")
+    return "\n".join(lines)
+
+
+@router.post("", response_model=ChatResponse)
+def chat(req: ChatRequest, db: Session = Depends(get_db)):
+    provider = get_provider(req.provider)
+    context = _build_context(db)
+    system = f"{SYSTEM_PROMPT}\n\n{context}"
+    msgs = [{"role": m.role, "content": m.content} for m in req.messages]
+    reply = provider.chat(system=system, messages=msgs)
+    return ChatResponse(reply=reply, provider=provider.name)
+
+
+@router.get("/briefing", response_model=ChatResponse)
+def daily_briefing(db: Session = Depends(get_db)):
+    """One-shot morning briefing — pulls today's data, asks the LLM to summarize."""
+    provider = get_provider()
+    context = _build_context(db)
+    system = f"{SYSTEM_PROMPT}\n\n{context}"
+    user_msg = (
+        "Give me a concise morning briefing: top 3 priorities for today based on my tasks and goals, "
+        "any deadlines I should know about, and one focused recommendation. Keep it under 200 words."
+    )
+    reply = provider.chat(system=system, messages=[{"role": "user", "content": user_msg}])
+    return ChatResponse(reply=reply, provider=provider.name)

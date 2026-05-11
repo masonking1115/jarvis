@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(34, 211, 238, 0.08), transparent 60%),
+    radial-gradient(800px 400px at 0% 100%, rgba(56, 189, 248, 0.06), transparent 60%),
+    #04101f;
+  color: #dbeafe;
+  font-feature-settings: "ss01", "cv11";
+}
+
+* { scrollbar-width: thin; scrollbar-color: #1f3a63 transparent; }
+
+.panel {
+  @apply rounded-2xl border border-jarvis-border bg-jarvis-panel/80 backdrop-blur p-4;
+}
+.panel-title {
+  @apply text-[11px] tracking-[0.18em] uppercase text-jarvis-muted font-semibold;
+}
+.btn  { @apply px-3 py-2 rounded-lg bg-jarvis-accent text-jarvis-bg font-semibold hover:opacity-90; }
+.btn-ghost { @apply px-3 py-2 rounded-lg border border-jarvis-border hover:bg-white/5 text-jarvis-text; }
+.input {
+  @apply bg-jarvis-bg border border-jarvis-border rounded-lg px-3 py-2 w-full text-sm text-jarvis-text
+         placeholder:text-jarvis-muted focus:outline-none focus:border-jarvis-accent;
+}
+.label { @apply text-[10px] uppercase tracking-[0.2em] text-jarvis-muted; }
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(56,189,248,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56,189,248,0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* small status dot */
+.dot { @apply inline-block w-1.5 h-1.5 rounded-full; }
+.dot-good { @apply bg-jarvis-good shadow-[0_0_8px_rgba(52,211,153,0.8)]; }
+.dot-warn { @apply bg-jarvis-warn shadow-[0_0_8px_rgba(249,115,22,0.8)]; }
+.dot-bad  { @apply bg-jarvis-bad  shadow-[0_0_8px_rgba(248,113,113,0.8)]; }
+.dot-info { @apply bg-jarvis-accent shadow-[0_0_8px_rgba(34,211,238,0.8)]; }
