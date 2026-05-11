@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <radialGradient id="core" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#bdf1ff" stop-opacity="1"/>
+      <stop offset="55%" stop-color="#4ad6ff" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#0a2a4a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%"  stop-color="#4ad6ff"/>
+      <stop offset="100%" stop-color="#00b8e6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background fill so the icon is visible on light tabs -->
+  <rect width="64" height="64" rx="10" fill="#040813"/>
+
+  <!-- outer hex ring -->
+  <polygon points="32,5 56,18 56,46 32,59 8,46 8,18"
+           fill="none" stroke="url(#ring)" stroke-width="3"/>
+
+  <!-- inner ring -->
+  <circle cx="32" cy="32" r="13" fill="none" stroke="#4ad6ff" stroke-width="2" opacity="0.75"/>
+
+  <!-- glowing core -->
+  <circle cx="32" cy="32" r="10" fill="url(#core)"/>
+
+  <!-- radial spokes -->
+  <g stroke="#4ad6ff" stroke-width="2.5" stroke-linecap="round">
+    <line x1="49"  y1="32"   x2="54"   y2="32"/>
+    <line x1="15"  y1="32"   x2="10"   y2="32"/>
+    <line x1="40.5" y1="46.8" x2="43"  y2="51.1"/>
+    <line x1="23.5" y1="17.2" x2="21"  y2="12.9"/>
+    <line x1="23.5" y1="46.8" x2="21"  y2="51.1"/>
+    <line x1="40.5" y1="17.2" x2="43"  y2="12.9"/>
+  </g>
+</svg>
