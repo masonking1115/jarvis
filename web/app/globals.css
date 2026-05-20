@@ -138,3 +138,74 @@ html, body {
   font-size: 10px; color: #4ad6ff;
 }
 .cta-link:hover { text-shadow: 0 0 8px rgba(74, 214, 255, 0.6); }
+
+/* ---------- intro hero animation ---------- */
+@keyframes spin-cw   { from { transform: rotate(0deg);   } to { transform: rotate(360deg);  } }
+@keyframes spin-ccw  { from { transform: rotate(0deg);   } to { transform: rotate(-360deg); } }
+
+@keyframes ring-breathe {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(74, 214, 255, 0.35));
+    opacity: 0.88;
+  }
+  50% {
+    filter: drop-shadow(0 0 22px rgba(74, 214, 255, 0.85));
+    opacity: 1;
+  }
+}
+
+@keyframes intro-tick {
+  0%, 100% { opacity: 0.25; }
+  50%      { opacity: 1; }
+}
+
+@keyframes intro-wordmark-pulse {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(255,255,255,0.25)); }
+  50%      { filter: drop-shadow(0 0 14px rgba(164, 234, 255, 0.7)); }
+}
+
+@keyframes intro-zoom-in {
+  0%   { transform: scale(0.4); opacity: 0; filter: blur(8px); }
+  60%  { transform: scale(1.04); opacity: 1; filter: blur(0); }
+  100% { transform: scale(1);    opacity: 1; }
+}
+
+@keyframes intro-fade-in {
+  0%  { opacity: 0; transform: translateY(8px); }
+  100%{ opacity: 1; transform: translateY(0); }
+}
+
+/* Network overlay fades in mid-cycle, then fades back out — seamless 9s loop. */
+@keyframes network-cycle {
+  0%, 25%  { opacity: 0; }
+  45%, 75% { opacity: 0.9; }
+  92%,100% { opacity: 0; }
+}
+
+/* Spin rates — kept distinct so the rings don't sync up visually. */
+.spin-cw-slow     { animation: spin-cw   28s linear infinite; transform-origin: center; }
+.spin-cw-med      { animation: spin-cw   18s linear infinite; transform-origin: center; }
+.spin-cw-veryslow { animation: spin-cw   60s linear infinite; transform-origin: center; }
+.spin-ccw-med     { animation: spin-ccw  14s linear infinite; transform-origin: center; }
+.spin-ccw-fast    { animation: spin-ccw  9s  linear infinite; transform-origin: center; }
+
+.ring-breathe     { animation: ring-breathe 4.5s ease-in-out infinite; transform-origin: center; }
+
+.intro-core {
+  animation: intro-zoom-in 1.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+.intro-wordmark { animation: intro-wordmark-pulse 4.5s ease-in-out infinite; }
+.intro-fade-in  { animation: intro-fade-in 1.2s ease-out 0.6s both; }
+
+.network-layer {
+  animation: network-cycle 9s ease-in-out infinite;
+}
+
+/* Respect reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .spin-cw-slow, .spin-cw-med, .spin-cw-veryslow, .spin-ccw-med, .spin-ccw-fast,
+  .ring-breathe, .intro-wordmark, .network-layer, .intro-core, .intro-fade-in {
+    animation: none !important;
+  }
+}

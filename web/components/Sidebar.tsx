@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { JarvisLogo } from "./JarvisLogo";
 
 const NAV = [
-  { href: "/",          label: "Dashboard" },
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/schedule",  label: "Schedule" },
   { href: "/goals",     label: "Goals" },
   { href: "/finance",   label: "Finance" },
