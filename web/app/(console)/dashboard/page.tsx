@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { api, Goal, Event, FinanceSummary, ChatReply, Project } from "@/lib/api";
+import { api, Goal, Event, ChatReply, Project, FinanceOverview } from "@/lib/api";
 import { Panel } from "@/components/Panel";
 import { StatusPill, Status } from "@/components/StatusPill";
 import { Ring } from "@/components/Ring";
@@ -23,7 +23,7 @@ type Agents = { placeholder: boolean; agents: { name: string; status: string; ro
 export default function Dashboard() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
-  const [fin, setFin] = useState<FinanceSummary | null>(null);
+  const [fin, setFin] = useState<FinanceOverview | null>(null);
   const [fitness, setFitness] = useState<Fitness | null>(null);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -36,7 +36,7 @@ export default function Dashboard() {
     const [g, e, f, fit, an, pr, ag] = await Promise.all([
       api.get<Goal[]>("/api/goals"),
       api.get<Event[]>("/api/schedule/today"),
-      api.get<FinanceSummary>("/api/finance/summary"),
+      api.get<FinanceOverview>("/api/finance/overview"),
       api.get<Fitness>("/api/fitness/today"),
       api.get<Analytics>("/api/analytics/overview"),
       api.get<Project[]>("/api/projects"),
@@ -244,25 +244,37 @@ function AnalyticsBlock({ analytics }: { analytics: Analytics | null }) {
   );
 }
 
-function FinanceBlock({ fin, series }: { fin: FinanceSummary | null; series: number[] }) {
-  const showDemo = !fin || fin.count === 0;
-  const headline = showDemo ? (series[series.length - 1] ?? 247850) : fin!.net;
+function FinanceBlock({ fin, series }: { fin: FinanceOverview | null; series: number[] }) {
+  const hasRealData = !!fin && (fin.assets_total > 0 || fin.liabilities_total > 0);
+  const headline = hasRealData ? fin!.net_worth : (series[series.length - 1] ?? 247850);
+  const positive = headline >= 0;
   return (
     <div className="space-y-3">
       <div>
-        <div className="label">{showDemo ? "Net Worth (demo)" : "Net"}</div>
-        <div className="numeric text-3xl text-jarvis-accent drop-shadow-[0_0_10px_rgba(74,214,255,0.4)] leading-none mt-1">
+        <div className="label">{hasRealData ? "Net Worth" : "Net Worth (demo)"}</div>
+        <div className={`numeric text-3xl ${positive ? "text-jarvis-accent" : "text-jarvis-bad"} drop-shadow-[0_0_10px_rgba(74,214,255,0.4)] leading-none mt-1`}>
           ${headline.toLocaleString(undefined, { maximumFractionDigits: 0 })}
         </div>
+        {fin && (
+          <div className="text-[10px] text-jarvis-muted mt-1 tracking-wider uppercase">
+            ${fin.assets_total.toFixed(0)} assets · ${fin.liabilities_total.toFixed(0)} debts
+          </div>
+        )}
       </div>
       <div className="-mx-1">
         <Sparkline data={series.length ? series : [1,2,3,4,5,6,7]} width={300} height={56} color="#4ad6ff" />
       </div>
       <div className="grid grid-cols-3 gap-2 text-center border-t border-jarvis-border pt-3">
-        <Stat label="Income"   value={fin ? `$${fin.income.toFixed(0)}` : "$0"} good />
-        <Stat label="Expenses" value={fin ? `$${Math.abs(fin.expenses).toFixed(0)}` : "$0"} />
-        <Stat label="Saved"    value={fin ? `$${Math.max(0, fin.net).toFixed(0)}` : "$0"} accent />
+        <Stat label="Income/mo" value={fin ? `$${fin.income.monthly_net.toFixed(0)}` : "$0"} good />
+        <Stat label="Spend/mo"  value={fin ? `$${fin.monthly_expenses.toFixed(0)}` : "$0"} />
+        <Stat label="Savings"   value={fin ? `$${Math.max(0, fin.monthly_savings_est).toFixed(0)}` : "$0"} accent />
       </div>
+      {fin?.income.next_pay_date && (
+        <div className="text-[11px] text-jarvis-muted">
+          Next paycheck: <span className="text-jarvis-accent">${fin.income.next_pay_amount?.toFixed(0)}</span>
+          {" "}in {fin.income.days_to_next_pay}d
+        </div>
+      )}
     </div>
   );
 }

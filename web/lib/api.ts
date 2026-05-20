@@ -33,5 +33,64 @@ export type Event = {
 export type Workout = { id: number; kind: string; duration_min: number; distance_mi: number|null; notes: string|null; performed_at: string };
 export type Txn = { id: number; amount: number; category: string; description: string|null; occurred_at: string };
 export type Project = { id: number; name: string; status: string; progress: number; notion_url: string|null; notes: string|null; created_at: string };
+
+export type IncomeSource = {
+  id: number;
+  name: string;
+  amount: number;
+  is_gross: boolean;
+  frequency: string;
+  next_pay_date: string | null;
+  notes: string | null;
+  active: boolean;
+  created_at: string;
+};
+
+export type Asset = {
+  id: number;
+  name: string;
+  category: string;
+  value: number;
+  ticker: string | null;
+  shares: number | null;
+  cost_basis: number | null;
+  notes: string | null;
+  last_updated: string;
+  created_at: string;
+};
+
+export type Liability = {
+  id: number;
+  name: string;
+  category: string;
+  balance: number;
+  apr: number | null;
+  minimum_payment: number | null;
+  due_day_of_month: number | null;
+  notes: string | null;
+  last_updated: string;
+  created_at: string;
+};
+
+export type FinanceOverview = {
+  net_worth: number;
+  assets_total: number;
+  liabilities_total: number;
+  cash_total: number;
+  investments_total: number;
+  debt_minimum_payment_total: number;
+  asset_breakdown: { category: string; value: number }[];
+  liability_breakdown: { category: string; value: number }[];
+  income: {
+    monthly_gross: number;
+    monthly_net: number;
+    next_pay_date: string | null;
+    next_pay_amount: number | null;
+    days_to_next_pay: number | null;
+  };
+  monthly_expenses: number;
+  monthly_savings_est: number;
+  transaction_summary: FinanceSummary;
+};
 export type FinanceSummary = { income: number; expenses: number; net: number; count: number };
 export type ChatReply = { reply: string; provider: string };
