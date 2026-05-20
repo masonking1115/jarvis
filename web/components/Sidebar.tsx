@@ -20,14 +20,14 @@ export function Sidebar() {
   const pathname = usePathname();
   return (
     <aside className="w-56 shrink-0 border-r border-jarvis-border bg-[#040813]/70 backdrop-blur min-h-screen flex flex-col">
-      {/* Top: brand mark */}
-      <div className="px-5 pt-5 pb-3 flex items-center gap-3">
+      {/* Top: brand mark → back to landing */}
+      <Link href="/" className="px-5 pt-5 pb-3 flex items-center gap-3 group" title="Return to landing">
         <JarvisLogo size={28} />
         <div>
-          <div className="font-display font-bold text-[15px] tracking-[0.18em] text-jarvis-text leading-none">JARVIS</div>
-          <div className="font-ui text-[10px] tracking-[0.28em] text-jarvis-muted mt-1">CONSOLE</div>
+          <div className="font-display font-bold text-[15px] tracking-[0.18em] text-jarvis-text leading-none group-hover:drop-shadow-[0_0_8px_rgba(74,214,255,0.6)] transition">JARVIS</div>
+          <div className="font-ui text-[10px] tracking-[0.28em] text-jarvis-muted mt-1 group-hover:text-jarvis-accent transition">CONSOLE</div>
         </div>
-      </div>
+      </Link>
 
       <div className="mx-5 my-2 h-px bg-gradient-to-r from-transparent via-jarvis-border to-transparent" />
 
@@ -51,15 +51,15 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Footer: JARVIS Online + bigger emblem like the screenshot */}
+      {/* Footer: JARVIS Online emblem → back to landing */}
       <div className="px-5 pb-5 pt-3 border-t border-jarvis-border">
-        <div className="flex items-center gap-3">
+        <Link href="/" className="flex items-center gap-3 group" title="Return to landing">
           <JarvisLogo size={44} />
           <div>
-            <div className="font-display text-jarvis-accent text-[13px] tracking-[0.22em] leading-none drop-shadow-[0_0_8px_rgba(74,214,255,0.6)]">JARVIS</div>
-            <div className="font-ui text-[10px] tracking-[0.28em] text-jarvis-muted mt-1">ONLINE</div>
+            <div className="font-display text-jarvis-accent text-[13px] tracking-[0.22em] leading-none drop-shadow-[0_0_8px_rgba(74,214,255,0.6)] group-hover:drop-shadow-[0_0_14px_rgba(74,214,255,0.9)] transition">JARVIS</div>
+            <div className="font-ui text-[10px] tracking-[0.28em] text-jarvis-muted mt-1 group-hover:text-jarvis-accent transition">ONLINE</div>
           </div>
-        </div>
+        </Link>
       </div>
     </aside>
   );

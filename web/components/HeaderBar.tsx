@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 export function HeaderBar() {
   const [now, setNow] = useState<Date | null>(null);
@@ -12,16 +13,16 @@ export function HeaderBar() {
   return (
     <header className="border-b border-jarvis-border bg-[#040813]/60 backdrop-blur">
       <div className="px-7 py-4 flex items-center justify-between">
-        {/* Left: brand wordmark + status */}
+        {/* Left: brand wordmark (→ landing) + status */}
         <div className="flex items-center gap-5">
-          <div>
-            <div className="font-display font-bold text-[22px] tracking-[0.22em] text-jarvis-text leading-none drop-shadow-[0_0_10px_rgba(74,214,255,0.35)]">
+          <Link href="/" className="group" title="Return to landing">
+            <div className="font-display font-bold text-[22px] tracking-[0.22em] text-jarvis-text leading-none drop-shadow-[0_0_10px_rgba(74,214,255,0.35)] group-hover:drop-shadow-[0_0_18px_rgba(74,214,255,0.7)] transition">
               JARVIS <span className="text-jarvis-accent">CONSOLE</span>
             </div>
-            <div className="font-ui text-[11px] tracking-[0.32em] text-jarvis-muted mt-1.5">
+            <div className="font-ui text-[11px] tracking-[0.32em] text-jarvis-muted mt-1.5 group-hover:text-jarvis-accent transition">
               CENTRAL LIFE OPTIMIZATION SYSTEM
             </div>
-          </div>
+          </Link>
           <span className="pill text-jarvis-good">
             <span className="dot dot-good" /> OPTIMAL
           </span>
