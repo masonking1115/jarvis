@@ -175,11 +175,10 @@ html, body {
   100%{ opacity: 1; transform: translateY(0); }
 }
 
-/* Network overlay fades in mid-cycle, then fades back out — seamless 9s loop. */
+/* Network overlay always visible (labels remain clickable), but its glow gently breathes. */
 @keyframes network-cycle {
-  0%, 25%  { opacity: 0; }
-  45%, 75% { opacity: 0.9; }
-  92%,100% { opacity: 0; }
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
 }
 
 /* Spin rates — kept distinct so the rings don't sync up visually. */
