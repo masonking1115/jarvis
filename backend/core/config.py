@@ -27,7 +27,10 @@ class Settings(BaseSettings):
     # Personal OAuth: SnapTrade's public PKCE client id (no secret). Used for the
     # one-time browser sign-in; the stored refresh_token then powers unattended sync.
     snaptrade_oauth_client_id: str = "lBHki0jPb0OJOca1cTlkHjuWsAGC8m6o2xOib0nN"
-    snaptrade_redirect_port: int = 8765
+    # Must match a redirect_uri registered for the OAuth client above. SnapTrade's
+    # public client whitelists exactly http://127.0.0.1:36987/oauth/callback —
+    # any other port returns "authorization request is invalid".
+    snaptrade_redirect_port: int = 36987
     snaptrade_sync_interval_min: int = 60
 
     @property
