@@ -130,3 +130,17 @@ def body_battery() -> Any:
 
 def recent_activities(limit: int = 5) -> list:
     return _cached(f"activities:{limit}", lambda: get_client().get_activities(0, limit))
+
+
+def list_activities(start: int = 0, limit: int = 20) -> list:
+    """Raw activity list (uncached) for the sync job to find new activities."""
+    result = get_client().get_activities(start, limit)
+    return result if isinstance(result, list) else []
+
+
+def download_activity_original(activity_id: int) -> bytes:
+    """Download an activity in Garmin's ORIGINAL format (a .zip of the .FIT)."""
+    from garminconnect import Garmin
+    return get_client().download_activity(
+        activity_id, dl_fmt=Garmin.ActivityDownloadFormat.ORIGINAL
+    )
