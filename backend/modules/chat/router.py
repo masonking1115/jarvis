@@ -7,6 +7,7 @@ from backend.core.db import get_db
 from backend.core.llm import get_provider
 from backend.modules.tasks.models import Task
 from backend.modules.goals.models import Goal
+from backend.modules.finance.models import Asset, Liability, Transaction
 
 
 router = APIRouter()
@@ -57,6 +58,29 @@ def _build_context(db: Session) -> str:
             lines.append(f"- [{g.category}] {g.title} ({int(g.progress * 100)}%){tgt}")
     else:
         lines.append("- (none)")
+    # Finance snapshot (includes Robinhood-synced holdings)
+    assets = db.query(Asset).order_by(Asset.value.desc()).all()
+    liabilities = db.query(Liability).all()
+    assets_total = sum(a.value or 0 for a in assets)
+    liab_total = sum(l.balance or 0 for l in liabilities)
+    cash_total = sum(a.value or 0 for a in assets if a.category == "cash")
+    lines += ["", "## Finance"]
+    lines.append(
+        f"- Net worth: ${assets_total - liab_total:,.0f} "
+        f"(assets ${assets_total:,.0f}, debts ${liab_total:,.0f}, cash ${cash_total:,.0f})"
+    )
+    top = [a for a in assets if a.category in ("stocks", "crypto")][:5]
+    if top:
+        lines.append("- Top positions:")
+        for a in top:
+            tk = f" {a.ticker}" if a.ticker else ""
+            lines.append(f"  - {a.name}{tk}: ${a.value:,.0f}")
+    recent = db.query(Transaction).order_by(Transaction.occurred_at.desc()).limit(3).all()
+    if recent:
+        lines.append("- Recent transactions:")
+        for t in recent:
+            sign = "-" if t.amount < 0 else "+"
+            lines.append(f"  - {t.occurred_at.date()} {sign}${abs(t.amount):,.0f} {t.category}")
     return "\n".join(lines)
 
 
