@@ -96,3 +96,11 @@ export type FinanceOverview = {
 };
 export type FinanceSummary = { income: number; expenses: number; net: number; count: number };
 export type ChatReply = { reply: string; provider: string };
+export type RobinhoodStatus = { configured: boolean; connected: boolean; reason?: string };
+export type RobinhoodSyncResult = {
+  available: boolean;
+  reason?: string;
+  assets_synced?: number;
+  transactions_synced?: number;
+  portfolio_value?: number;
+};

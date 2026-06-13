@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import {
   api, Txn, IncomeSource, Asset, Liability, FinanceOverview,
+  RobinhoodStatus, RobinhoodSyncResult,
 } from "@/lib/api";
 import { Panel } from "@/components/Panel";
 
@@ -42,6 +43,8 @@ export default function FinancePage() {
       <h1 className="text-2xl font-bold">Finance — Personal CFO</h1>
 
       <OverviewBlock overview={overview} />
+
+      <RobinhoodBlock onSynced={refresh} />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <IncomeBlock items={income} onChange={refresh} />
@@ -399,6 +402,71 @@ function TransactionsBlock({ items, onChange }: { items: Txn[]; onChange: () => 
         ))}
         {items.length === 0 && <li className="text-sm text-jarvis-muted italic py-2">No transactions yet.</li>}
       </ul>
+    </Panel>
+  );
+}
+
+/* ---------------- Robinhood ---------------- */
+
+function RobinhoodBlock({ onSynced }: { onSynced: () => void }) {
+  const [status, setStatus] = useState<RobinhoodStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function loadStatus() {
+    try { setStatus(await api.get<RobinhoodStatus>("/api/robinhood/status")); }
+    catch { setStatus(null); }
+  }
+  useEffect(() => { loadStatus(); }, []);
+
+  async function connect() {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api.post<{ available: boolean; redirect_url?: string; reason?: string }>("/api/robinhood/connect", {});
+      if (r.available && r.redirect_url) window.open(r.redirect_url, "_blank");
+      else setMsg(r.reason ?? "Could not start connection.");
+    } finally { setBusy(false); }
+  }
+
+  async function syncNow() {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api.post<RobinhoodSyncResult>("/api/robinhood/sync", {});
+      if (r.available) {
+        setMsg(`Synced ${r.assets_synced} holdings · ${r.transactions_synced} transactions · ${$(r.portfolio_value ?? 0)} portfolio`);
+        onSynced();
+      } else {
+        setMsg(r.reason ?? "Sync unavailable.");
+      }
+    } finally { setBusy(false); loadStatus(); }
+  }
+
+  const connected = status?.connected;
+  const pill = !status?.configured
+    ? { t: "NOT CONFIGURED", c: "#6b7c9a" }
+    : connected
+      ? { t: "CONNECTED", c: "#22e8a0" }
+      : { t: "NOT CONNECTED", c: "#ff9c2a" };
+
+  return (
+    <Panel title="Robinhood">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="pill" style={{ borderColor: pill.c, color: pill.c }}>
+          <span className="dot" style={{ background: pill.c, width: 7, height: 7 }} /> {pill.t}
+        </span>
+        {!connected && (
+          <button className="btn" disabled={busy || !status?.configured} onClick={connect}>
+            CONNECT ROBINHOOD
+          </button>
+        )}
+        <button className="btn" disabled={busy || !connected} onClick={syncNow}>SYNC NOW</button>
+        {msg && <span className="text-xs text-jarvis-muted">{msg}</span>}
+      </div>
+      {!status?.configured && (
+        <div className="text-xs text-jarvis-muted mt-2">
+          Add SNAPTRADE_CLIENT_ID and SNAPTRADE_CONSUMER_KEY to backend/.env, then restart the backend.
+        </div>
+      )}
     </Panel>
   );
 }
