@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     garmin_password: str = ""
     garmin_token_dir: str = "./data/garmin_token"
 
+    snaptrade_client_id: str = ""
+    snaptrade_consumer_key: str = ""
+    snaptrade_data_dir: str = "./data/snaptrade"
+
     @property
     def cors_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
