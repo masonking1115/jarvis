@@ -203,3 +203,41 @@ in tests — SnapTrade responses are fixtures.
 6. Chat context-injection.
 7. Finance-page UI (status pill, Connect, Sync now).
 8. Manual end-to-end connect + sync against a real Robinhood account.
+
+---
+
+## Addendum (2026-06-13): Personal OAuth pivot — IMPLEMENTED
+
+The original design assumed partner/commercial SnapTrade keys (signature auth +
+`registerSnapTradeUser` + `{userId, userSecret}`). The account in use has
+**Personal** keys, which reject `registerUser` (HTTP 400, code 1012:
+"Personal SnapTrade keys are provisioned with their user automatically at signup.
+Use the OAuth bearer flow"). The auth layer was re-architected accordingly.
+
+**New auth model — OAuth2 + PKCE bearer (read-only):**
+- One-time browser sign-in: `connect()` builds an authorize URL
+  (`authorization_endpoint` from discovery, public PKCE `client_id`,
+  `redirect_uri=http://127.0.0.1:<port>/oauth/callback`, `scope=read`, S256
+  challenge) and starts a one-shot loopback listener.
+- SnapTrade redirects to the loopback with `code`; we exchange it for an
+  `access_token` + `refresh_token` and store them at
+  `data/snaptrade/oauth_tokens.json` (gitignored; never logged or returned).
+- Data calls are raw `httpx` GETs to `https://api.snaptrade.com/api/v1/...` with
+  `Authorization: Bearer <token>`. The Personal user is implied by the token —
+  no `userId`/`userSecret`. (The Python SDK only speaks signature auth, so it is
+  not used for data.)
+
+**Automatic polling (the key requirement):** the stored `refresh_token` lets the
+backend mint fresh access tokens with no further user interaction. A background
+scheduler (`scheduler.py`, started in the app lifespan) syncs every
+`SNAPTRADE_SYNC_INTERVAL_MIN` minutes (default 60), runs only when tokens exist,
+and logs-and-continues on error. After the one-time sign-in, sync is unattended.
+
+**Unchanged from the original design:** `sync.py` pure mappings (+ tests), the
+idempotent upsert keyed on `(source, external_id)`, the `source`/`external_id`
+columns, the chat context injection, and the Finance-page UI shape. The upsert
+moved into `service.py` so the scheduler and the `/sync` endpoint share it.
+
+**New files:** `oauth.py`, `service.py`, `scheduler.py`.
+**New config:** `snaptrade_oauth_client_id`, `snaptrade_redirect_port`,
+`snaptrade_sync_interval_min`.

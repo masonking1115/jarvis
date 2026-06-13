@@ -1086,3 +1086,31 @@ git commit -m "Adjust SnapTrade payload normalization to real Robinhood data"
 - [ ] **Step 7: Verify chat sees the portfolio**
 
 On http://localhost:3000/chat, ask "What's in my portfolio?" Confirm the assistant references your synced holdings/net worth (requires an LLM key; with the stub provider, instead confirm the context by checking `/api/chat/briefing` returns without error).
+
+---
+
+## Addendum (2026-06-13): Personal OAuth pivot — IMPLEMENTED
+
+Personal SnapTrade keys reject `registerUser` (400 / code 1012) and require the
+OAuth bearer flow. The auth layer was reworked; see the spec addendum for the
+full model. Net changes to this plan:
+
+- **Done differently than planned:** `client.py` no longer uses the Python SDK /
+  signature auth. It makes raw `httpx` Bearer GETs to `api.snaptrade.com/api/v1`.
+  Auth/token logic lives in the new **`oauth.py`** (discovery, PKCE, loopback
+  callback, token exchange/refresh, storage to `data/snaptrade/oauth_tokens.json`).
+- **New: automatic polling** — **`scheduler.py`** runs an async loop started in
+  the app lifespan; syncs every `SNAPTRADE_SYNC_INTERVAL_MIN` (default 60) when
+  tokens exist. This satisfies the "poll periodically and automatically" goal.
+- **New: `service.py`** — shared `sync_to_db()` + upserts, reused by both the
+  `/sync` endpoint and the scheduler (DRY).
+- **Endpoints:** added `POST /disconnect` (clear tokens). `/status` now reports
+  "not signed in" vs "signed in, no brokerage linked" vs "connected".
+- **Frontend:** the CONNECT button opens the authorize URL and then polls
+  `/status`, auto-running a sync once connected.
+
+**Verified:** app imports clean; 30 tests pass (incl. new `test_robinhood_oauth.py`);
+live `/connect` returns a valid PKCE authorize URL; loopback listens on the
+redirect port. **Remaining (user action):** one-time browser sign-in + linking
+Robinhood inside SnapTrade, after which sync is automatic. Manual placeholder
+asset cleanup is gated on the first successful real sync.

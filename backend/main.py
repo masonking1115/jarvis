@@ -16,7 +16,11 @@ from backend.core.registry import discover_and_mount
 async def lifespan(app: FastAPI):
     init_db()
     app.state.modules = discover_and_mount(app)
+    # Robinhood/SnapTrade unattended sync (no-op until the user signs in once).
+    from backend.modules.robinhood import scheduler as robinhood_scheduler
+    robinhood_scheduler.start()
     yield
+    await robinhood_scheduler.stop()
 
 
 app = FastAPI(title="Jarvis", version="0.1.0", lifespan=lifespan)

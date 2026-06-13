@@ -423,9 +423,29 @@ function RobinhoodBlock({ onSynced }: { onSynced: () => void }) {
     setBusy(true); setMsg(null);
     try {
       const r = await api.post<{ available: boolean; redirect_url?: string; reason?: string }>("/api/robinhood/connect", {});
-      if (r.available && r.redirect_url) window.open(r.redirect_url, "_blank");
-      else setMsg(r.reason ?? "Could not start connection.");
+      if (r.available && r.redirect_url) {
+        window.open(r.redirect_url, "_blank");
+        setMsg("Finish the SnapTrade sign-in in the new tab — this panel will update automatically.");
+        pollUntilConnected();
+      } else {
+        setMsg(r.reason ?? "Could not start connection.");
+      }
     } finally { setBusy(false); }
+  }
+
+  // After the browser sign-in, the backend loopback stores tokens out-of-band;
+  // poll status so the panel flips to CONNECTED, then pull data immediately.
+  function pollUntilConnected() {
+    let tries = 0;
+    const iv = setInterval(async () => {
+      tries += 1;
+      try {
+        const s = await api.get<RobinhoodStatus>("/api/robinhood/status");
+        setStatus(s);
+        if (s.connected) { clearInterval(iv); setMsg("Connected — syncing…"); syncNow(); return; }
+      } catch { /* keep polling */ }
+      if (tries >= 60) { clearInterval(iv); }  // give up after ~3 min
+    }, 3000);
   }
 
   async function syncNow() {

@@ -303,7 +303,7 @@ function NetworkOverlay() {
             <span className="absolute inline-flex h-3 w-3 rounded-full bg-jarvis-accent opacity-60 animate-ping" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-jarvis-accent shadow-[0_0_10px_rgba(74,214,255,0.95)]" />
           </span>
-          <span className="font-ui text-[10px] md:text-[11px] tracking-[0.28em] uppercase text-jarvis-accent group-hover:text-white group-hover:drop-shadow-[0_0_8px_rgba(164,234,255,0.9)] transition">
+          <span className="font-ui text-[14px] md:text-[16px] tracking-[0.28em] uppercase text-jarvis-accent group-hover:text-white group-hover:drop-shadow-[0_0_8px_rgba(164,234,255,0.9)] transition">
             {n.label}
           </span>
         </Link>

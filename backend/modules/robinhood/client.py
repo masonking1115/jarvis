@@ -1,90 +1,38 @@
-"""SnapTrade client wrapper for the Robinhood connection (read-only).
+"""SnapTrade data client (read-only) over Personal OAuth bearer tokens.
 
-Auth model:
-  - App keys SNAPTRADE_CLIENT_ID / SNAPTRADE_CONSUMER_KEY come from .env.
-  - A per-user {userId, userSecret} is minted once via connect() and cached to
-    data/snaptrade/creds.json. userSecret is a read-only access token — NOT the
-    Robinhood password (the user authorizes Robinhood on SnapTrade's portal).
+Auth/token machinery lives in oauth.py. Here we make the data calls: raw httpx
+GETs to https://api.snaptrade.com/api/v1 with `Authorization: Bearer <token>`.
+The Personal user is implied by the token — no userId/userSecret. (The Python
+SDK only speaks signature auth, so it is not used for data.)
+
+fetch_normalized() returns the exact dict shapes sync.py consumes, so sync.py /
+service.py / the UI are unchanged from the previous signature-auth design.
 
 Responses are cached 60s to avoid hammering SnapTrade.
 """
 from __future__ import annotations
 
-import json
 import time
-from pathlib import Path
 from typing import Any
 
+import httpx
+
 from backend.core.config import settings
+from . import oauth
+
+API_BASE = "https://api.snaptrade.com/api/v1"
 
 
 class SnapTradeNotConfigured(Exception):
-    """No SnapTrade API keys in .env."""
+    """No SnapTrade OAuth client configured."""
 
 
 class SnapTradeNotConnected(Exception):
-    """No registered user / linked brokerage yet."""
+    """Not signed in, or no linked brokerage yet."""
 
 
-_client = None
 _cache: dict[str, tuple[float, Any]] = {}
 _CACHE_TTL = 60.0
-_USER_ID = "jarvis-user"  # single-user app: one fixed SnapTrade user id
-
-
-def _data_dir() -> Path:
-    p = Path(settings.snaptrade_data_dir)
-    if not p.is_absolute():
-        p = (Path(__file__).resolve().parent.parent.parent / p).resolve()
-    return p
-
-
-def _creds_path() -> Path:
-    return _data_dir() / "creds.json"
-
-
-def _get_sdk():
-    global _client
-    if _client is not None:
-        return _client
-    if not settings.snaptrade_client_id or not settings.snaptrade_consumer_key:
-        raise SnapTradeNotConfigured(
-            "SNAPTRADE_CLIENT_ID / SNAPTRADE_CONSUMER_KEY not set in backend/.env"
-        )
-    try:
-        from snaptrade_client import SnapTrade
-    except ImportError as e:
-        raise SnapTradeNotConfigured("snaptrade-python-sdk not installed") from e
-    _client = SnapTrade(
-        consumer_key=settings.snaptrade_consumer_key,
-        client_id=settings.snaptrade_client_id,
-    )
-    return _client
-
-
-def _load_creds() -> dict | None:
-    p = _creds_path()
-    if not p.exists():
-        return None
-    try:
-        return json.loads(p.read_text())
-    except Exception:  # noqa: BLE001
-        return None
-
-
-def _save_creds(user_id: str, user_secret: str) -> None:
-    d = _data_dir()
-    d.mkdir(parents=True, exist_ok=True)
-    _creds_path().write_text(json.dumps({"userId": user_id, "userSecret": user_secret}))
-
-
-def _require_creds() -> dict:
-    creds = _load_creds()
-    if not creds:
-        raise SnapTradeNotConnected(
-            "No SnapTrade user registered. POST /api/robinhood/connect first."
-        )
-    return creds
 
 
 def _cached(key: str, fn):
@@ -97,55 +45,65 @@ def _cached(key: str, fn):
     return val
 
 
-# ---- public API ----
-
-def status() -> dict:
-    if not settings.snaptrade_client_id or not settings.snaptrade_consumer_key:
-        return {"configured": False, "connected": False,
-                "reason": "SNAPTRADE_CLIENT_ID / SNAPTRADE_CONSUMER_KEY not set"}
-    creds = _load_creds()
-    if not creds:
-        return {"configured": True, "connected": False,
-                "reason": "No SnapTrade user registered yet"}
+def _bearer_get(path: str) -> Any:
     try:
-        accounts = _list_accounts_raw(creds)
-        return {"configured": True, "connected": bool(accounts)}
+        token = oauth.get_access_token()
+    except oauth.OAuthError as e:
+        raise SnapTradeNotConnected(str(e)) from e
+    r = httpx.get(
+        f"{API_BASE}{path}",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        timeout=30,
+    )
+    if r.status_code == 401:
+        raise SnapTradeNotConnected("SnapTrade token rejected (401) — reconnect.")
+    r.raise_for_status()
+    return r.json()
+
+
+# ---- public API ----
+def status() -> dict:
+    if not settings.snaptrade_oauth_client_id:
+        return {"configured": False, "connected": False,
+                "reason": "SnapTrade OAuth client id not set"}
+    if not oauth.has_tokens():
+        return {"configured": True, "connected": False,
+                "reason": "Not signed in to SnapTrade yet"}
+    try:
+        accounts = _list_accounts()
+        if accounts:
+            return {"configured": True, "connected": True}
+        return {"configured": True, "connected": False,
+                "reason": "Signed in, but no brokerage linked in SnapTrade yet"}
+    except SnapTradeNotConnected as e:
+        return {"configured": True, "connected": False, "reason": str(e)}
     except Exception as e:  # noqa: BLE001
         return {"configured": True, "connected": False, "reason": f"snaptrade error: {e}"}
 
 
 def connect() -> dict:
-    """Register a SnapTrade user if needed and return a connection-portal URL."""
-    sdk = _get_sdk()
-    creds = _load_creds()
-    if not creds:
-        resp = sdk.authentication.register_snap_trade_user(body={"userId": _USER_ID})
-        user_secret = resp.body["userSecret"]
-        _save_creds(_USER_ID, user_secret)
-        creds = {"userId": _USER_ID, "userSecret": user_secret}
-    login = sdk.authentication.login_snap_trade_user(
-        query_params={"userId": creds["userId"], "userSecret": creds["userSecret"]}
-    )
-    body = login.body
-    redirect = body.get("redirectURI") if isinstance(body, dict) else None
-    return {"redirect_url": redirect}
+    """Begin the one-time browser OAuth sign-in; return the authorize URL to open."""
+    if not settings.snaptrade_oauth_client_id:
+        raise SnapTradeNotConfigured("SnapTrade OAuth client id not set")
+    return {"redirect_url": oauth.start_authorization()}
 
 
-def _list_accounts_raw(creds: dict) -> list:
-    sdk = _get_sdk()
-    resp = sdk.account_information.list_user_accounts(
-        user_id=creds["userId"], user_secret=creds["userSecret"],
-    )
-    return list(resp.body or [])
+def disconnect() -> dict:
+    """Forget stored tokens (sign out). Synced rows are left untouched."""
+    oauth.clear_tokens()
+    return {"disconnected": True}
+
+
+def _list_accounts() -> list:
+    return list(_cached("accounts", lambda: _bearer_get("/accounts")) or [])
 
 
 def fetch_normalized() -> dict:
     """Pull accounts/balances/positions/activities and normalize to the dict
-    shapes sync.py consumes. Network + JSON parsing live here so sync stays pure.
-    """
-    creds = _require_creds()
-    sdk = _get_sdk()
-    accounts = _cached("accounts", lambda: _list_accounts_raw(creds))
+    shapes sync.py consumes. Network + JSON parsing live here so sync stays pure."""
+    if not oauth.has_tokens():
+        raise SnapTradeNotConnected("Not signed in. Connect Robinhood first.")
+    accounts = _list_accounts()
     if not accounts:
         raise SnapTradeNotConnected("No linked brokerage accounts. Connect Robinhood first.")
 
@@ -154,34 +112,44 @@ def fetch_normalized() -> dict:
     activities: list[dict] = []
 
     for acc in accounts:
+        if not isinstance(acc, dict):
+            continue
         acc_id = acc.get("id") or acc.get("accountId")
         if not acc_id:
             continue
 
-        bal = sdk.account_information.get_user_account_balance(
-            user_id=creds["userId"], user_secret=creds["userSecret"], account_id=acc_id,
-        ).body or []
-        cash_total = sum(float(b.get("cash") or 0.0) for b in bal)
+        try:
+            bal = _bearer_get(f"/accounts/{acc_id}/balances") or []
+        except SnapTradeNotConnected:
+            raise
+        except Exception:  # noqa: BLE001
+            bal = []
+        cash_total = sum(float(b.get("cash") or 0.0) for b in bal if isinstance(b, dict))
         cash.append({"account_id": acc_id, "amount": cash_total})
 
-        pos = sdk.account_information.get_all_account_positions(
-            user_id=creds["userId"], user_secret=creds["userSecret"], account_id=acc_id,
-        ).body or []
+        try:
+            pos = _bearer_get(f"/accounts/{acc_id}/positions") or []
+        except SnapTradeNotConnected:
+            raise
+        except Exception:  # noqa: BLE001
+            pos = []
         for p in pos:
-            positions.append(_normalize_position(acc_id, p))
+            if isinstance(p, dict):
+                positions.append(_normalize_position(acc_id, p))
 
         try:
-            acts = sdk.account_information.get_account_activities(
-                account_id=acc_id, user_id=creds["userId"], user_secret=creds["userSecret"],
-            ).body or []
+            acts = _bearer_get(f"/accounts/{acc_id}/activities") or []
+        except SnapTradeNotConnected:
+            raise
         except Exception:  # noqa: BLE001
             acts = []
         if isinstance(acts, dict):
             acts = acts.get("data") or []
         for a in acts:
-            norm = _normalize_activity(a)
-            if norm:
-                activities.append(norm)
+            if isinstance(a, dict):
+                norm = _normalize_activity(a)
+                if norm:
+                    activities.append(norm)
 
     return {"positions": positions, "cash": cash, "activities": activities}
 

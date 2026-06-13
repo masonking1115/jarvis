@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     snaptrade_client_id: str = ""
     snaptrade_consumer_key: str = ""
     snaptrade_data_dir: str = "./data/snaptrade"
+    # Personal OAuth: SnapTrade's public PKCE client id (no secret). Used for the
+    # one-time browser sign-in; the stored refresh_token then powers unattended sync.
+    snaptrade_oauth_client_id: str = "lBHki0jPb0OJOca1cTlkHjuWsAGC8m6o2xOib0nN"
+    snaptrade_redirect_port: int = 8765
+    snaptrade_sync_interval_min: int = 60
 
     @property
     def cors_list(self) -> list[str]:
