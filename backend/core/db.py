@@ -56,6 +56,14 @@ def _apply_lightweight_migrations() -> None:
             ("completed",    "BOOLEAN DEFAULT 0"),
             ("duration_min", "INTEGER"),
         ],
+        "assets": [
+            ("source",      "VARCHAR(32) DEFAULT 'manual'"),
+            ("external_id", "VARCHAR(128)"),
+        ],
+        "transactions": [
+            ("source",      "VARCHAR(32) DEFAULT 'manual'"),
+            ("external_id", "VARCHAR(128)"),
+        ],
     }
     with engine.begin() as conn:
         for table, cols in additions.items():

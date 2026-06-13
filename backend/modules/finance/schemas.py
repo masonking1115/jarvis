@@ -17,6 +17,8 @@ class TxnOut(TxnBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     occurred_at: datetime
+    source: str = "manual"
+    external_id: str | None = None
 
 
 # ---------- Income sources ----------
@@ -78,6 +80,8 @@ class AssetOut(AssetBase):
     id: int
     last_updated: datetime
     created_at: datetime
+    source: str = "manual"
+    external_id: str | None = None
 
 
 # ---------- Liabilities ----------

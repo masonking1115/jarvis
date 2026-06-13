@@ -11,6 +11,8 @@ class Transaction(Base):
     category: Mapped[str] = mapped_column(String(64), default="misc")
     description: Mapped[str | None] = mapped_column(String(500), default=None)
     occurred_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    source: Mapped[str] = mapped_column(String(32), default="manual")        # manual | robinhood
+    external_id: Mapped[str | None] = mapped_column(String(128), default=None)
 
 
 class IncomeSource(Base):
@@ -38,6 +40,8 @@ class Asset(Base):
     notes: Mapped[str | None] = mapped_column(String(500), default=None)
     last_updated: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    source: Mapped[str] = mapped_column(String(32), default="manual")        # manual | robinhood
+    external_id: Mapped[str | None] = mapped_column(String(128), default=None)
 
 
 class Liability(Base):

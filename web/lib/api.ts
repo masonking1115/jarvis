@@ -31,7 +31,7 @@ export type Event = {
   notes: string | null;
 };
 export type Workout = { id: number; kind: string; duration_min: number; distance_mi: number|null; notes: string|null; performed_at: string };
-export type Txn = { id: number; amount: number; category: string; description: string|null; occurred_at: string };
+export type Txn = { id: number; amount: number; category: string; description: string|null; occurred_at: string; source: string; external_id: string|null };
 export type Project = { id: number; name: string; status: string; progress: number; notion_url: string|null; notes: string|null; created_at: string };
 
 export type IncomeSource = {
@@ -57,6 +57,8 @@ export type Asset = {
   notes: string | null;
   last_updated: string;
   created_at: string;
+  source: string;
+  external_id: string | null;
 };
 
 export type Liability = {
