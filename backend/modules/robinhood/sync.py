@@ -13,7 +13,7 @@ Normalized input shapes (produced by client.py):
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 SOURCE = "robinhood"
 _BUY_TYPES = {"BUY", "REINVEST"}
@@ -68,9 +68,17 @@ def activity_to_transaction(act: dict) -> dict:
 
 
 def _parse_dt(value: str | None) -> datetime:
+    """Parse an ISO date into a naive-UTC datetime.
+
+    occurred_at is stored as a naive DateTime and compared against naive cutoffs
+    elsewhere, so we normalize tz-aware inputs to naive UTC for consistency.
+    """
     if not value:
         return datetime.utcnow()
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return datetime.utcnow()
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt

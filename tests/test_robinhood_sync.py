@@ -49,6 +49,13 @@ def test_activity_dividend_positive():
     assert t["category"] == "dividend"
 
 
+def test_activity_occurred_at_is_naive():
+    t = sync.activity_to_transaction({"id": "z1", "type": "SELL", "amount": 100.0,
+                                      "symbol": "AAPL", "description": None,
+                                      "date": "2026-06-10T14:30:00Z"})
+    assert t["occurred_at"].tzinfo is None
+
+
 def test_external_ids_are_stable():
     pos = {"account_id": "acc1", "ticker": "AAPL", "name": "Apple",
            "units": 10.0, "price": 150.0, "cost_basis_per_share": 120.0, "is_crypto": False}

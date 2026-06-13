@@ -57,9 +57,12 @@ def summary(db: Session = Depends(get_db)):
 
 
 def _txn_summary(db: Session) -> FinanceSummary:
-    income = db.query(func.coalesce(func.sum(Transaction.amount), 0.0)).filter(Transaction.amount > 0).scalar() or 0.0
-    expenses = db.query(func.coalesce(func.sum(Transaction.amount), 0.0)).filter(Transaction.amount < 0).scalar() or 0.0
-    count = db.query(func.count(Transaction.id)).scalar() or 0
+    # Personal cash-flow rollup: exclude brokerage-synced transactions (e.g. a
+    # stock buy isn't "spending" — the position is already counted as an asset).
+    manual = Transaction.source != "robinhood"
+    income = db.query(func.coalesce(func.sum(Transaction.amount), 0.0)).filter(manual, Transaction.amount > 0).scalar() or 0.0
+    expenses = db.query(func.coalesce(func.sum(Transaction.amount), 0.0)).filter(manual, Transaction.amount < 0).scalar() or 0.0
+    count = db.query(func.count(Transaction.id)).filter(manual).scalar() or 0
     return FinanceSummary(income=float(income), expenses=float(expenses), net=float(income + expenses), count=int(count))
 
 
@@ -257,6 +260,7 @@ def overview(db: Session = Depends(get_db)):
     # monthly expense from last 30 days of transactions (absolute value)
     cutoff = datetime.utcnow() - timedelta(days=30)
     expenses_30d = db.query(func.coalesce(func.sum(Transaction.amount), 0.0)).filter(
+        Transaction.source != "robinhood",
         Transaction.amount < 0,
         Transaction.occurred_at >= cutoff,
     ).scalar() or 0.0
