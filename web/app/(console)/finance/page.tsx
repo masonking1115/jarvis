@@ -174,25 +174,38 @@ function IncomeBlock({ items, onChange }: { items: IncomeSource[]; onChange: () 
       </form>
 
       {items.length === 0 && <div className="text-sm text-jarvis-muted italic">No income sources yet.</div>}
-      <ul className="divide-y divide-jarvis-border/70">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {items.map(s => (
-          <li key={s.id} className="py-2.5 flex flex-wrap items-center gap-2 text-sm">
-            <input className="input !py-1 !px-2 flex-1 min-w-[180px]" defaultValue={s.name}
-                   onBlur={e => e.target.value !== s.name && patch(s, { name: e.target.value })} />
-            <input className="input !py-1 !px-2 w-24 numeric" type="number" step="0.01" defaultValue={s.amount}
-                   onBlur={e => Number(e.target.value) !== s.amount && patch(s, { amount: Number(e.target.value) })} />
-            <select className="input !py-1 !px-2 w-32" value={s.frequency} onChange={e => patch(s, { frequency: e.target.value })}>
-              {INCOME_FREQS.map(f => <option key={f} value={f}>{f}</option>)}
-            </select>
-            <input className="input !py-1 !px-2 w-40" type="date" defaultValue={s.next_pay_date ?? ""}
-                   onBlur={e => patch(s, { next_pay_date: e.target.value || null })} />
-            <label className="flex items-center gap-1 text-[10px] text-jarvis-muted">
+          <div key={s.id} className="rounded-lg border border-jarvis-border/70 bg-white/[0.02] p-3 flex flex-col gap-2">
+            <div className="flex items-start gap-2">
+              <input className="input !py-1 !px-2 flex-1 text-sm font-medium" defaultValue={s.name}
+                     onBlur={e => e.target.value !== s.name && patch(s, { name: e.target.value })} />
+              <button onClick={() => remove(s)} className="text-xs text-jarvis-muted hover:text-jarvis-bad mt-1.5">✕</button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <div className="text-[10px] tracking-wider text-jarvis-muted mb-0.5">AMOUNT</div>
+                <input className="input !py-1 !px-2 w-full numeric" type="number" step="0.01" defaultValue={s.amount}
+                       onBlur={e => Number(e.target.value) !== s.amount && patch(s, { amount: Number(e.target.value) })} />
+              </div>
+              <div>
+                <div className="text-[10px] tracking-wider text-jarvis-muted mb-0.5">FREQUENCY</div>
+                <select className="input !py-1 !px-2 w-full" value={s.frequency} onChange={e => patch(s, { frequency: e.target.value })}>
+                  {INCOME_FREQS.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] tracking-wider text-jarvis-muted mb-0.5">NEXT PAY</div>
+              <input className="input !py-1 !px-2 w-full" type="date" defaultValue={s.next_pay_date ?? ""}
+                     onBlur={e => patch(s, { next_pay_date: e.target.value || null })} />
+            </div>
+            <label className="flex items-center gap-1.5 text-[11px] text-jarvis-muted mt-0.5">
               <input type="checkbox" checked={s.active} onChange={e => patch(s, { active: e.target.checked })} /> active
             </label>
-            <button onClick={() => remove(s)} className="text-xs text-jarvis-muted hover:text-jarvis-bad">✕</button>
-          </li>
+          </div>
         ))}
-      </ul>
+      </div>
     </Panel>
   );
 }
