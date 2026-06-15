@@ -1,5 +1,5 @@
 from pathlib import Path
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
 from typing import Generator
 
@@ -20,8 +20,16 @@ if _url.startswith("sqlite:///"):
 
 engine = create_engine(
     _url,
-    connect_args={"check_same_thread": False} if _url.startswith("sqlite") else {},
+    connect_args={"check_same_thread": False, "timeout": 30} if _url.startswith("sqlite") else {},
 )
+
+if _url.startswith("sqlite"):
+    @event.listens_for(engine, "connect")
+    def _sqlite_busy_timeout(dbapi_conn, _):  # per-connection, cheap, no lock: wait up to
+        cur = dbapi_conn.cursor()             # 30s for a writer instead of erroring "database is locked".
+        cur.execute("PRAGMA busy_timeout=30000")
+        cur.close()
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
@@ -37,8 +45,17 @@ def init_db() -> None:
     # Import all module models so Base.metadata sees them
     from backend.modules import tasks, goals, schedule, workouts, finance, projects  # noqa: F401
     from backend.modules.projects import models as _project_models  # noqa: F401
+    from backend.modules.gmail import models as _gmail_models  # noqa: F401
     Base.metadata.create_all(bind=engine)
     _apply_lightweight_migrations()
+    # WAL improves reader/writer concurrency. Set once at startup; best-effort
+    # (the one-time transition needs exclusive access, so don't fail if busy).
+    if _url.startswith("sqlite"):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("PRAGMA journal_mode=WAL"))
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _apply_lightweight_migrations() -> None:
@@ -63,6 +80,16 @@ def _apply_lightweight_migrations() -> None:
         "transactions": [
             ("source",      "VARCHAR(32) DEFAULT 'manual'"),
             ("external_id", "VARCHAR(128)"),
+        ],
+        "email_suppressed_senders": [
+            ("filter_id", "VARCHAR(128)"),
+        ],
+        "liabilities": [
+            ("source",      "VARCHAR(32) DEFAULT 'manual'"),
+            ("external_id", "VARCHAR(128)"),
+        ],
+        "email_purchases": [
+            ("liability_id", "INTEGER"),
         ],
     }
     with engine.begin() as conn:

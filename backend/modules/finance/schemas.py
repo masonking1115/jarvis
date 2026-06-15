@@ -93,6 +93,8 @@ class LiabilityBase(BaseModel):
     minimum_payment: float | None = None
     due_day_of_month: int | None = None
     notes: str | None = None
+    source: str = "manual"
+    external_id: str | None = None
 
 
 class LiabilityCreate(LiabilityBase): pass

@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   api, Txn, IncomeSource, Asset, Liability, FinanceOverview,
-  RobinhoodStatus, RobinhoodSyncResult,
+  RobinhoodStatus, RobinhoodSyncResult, EmailCardStatement, StatementReminder, CardSpending,
 } from "@/lib/api";
 import { Panel } from "@/components/Panel";
+import { PieChart } from "@/components/PieChart";
 
 const INCOME_FREQS = ["weekly", "biweekly", "semimonthly", "monthly", "annual", "irregular"];
 const ASSET_CATS = ["cash", "stocks", "crypto", "retirement", "real_estate", "vehicle", "other"];
@@ -19,12 +20,30 @@ const CAT_COLOR: Record<string, string> = {
 const $ = (n: number, opts: Intl.NumberFormatOptions = {}) =>
   n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0, ...opts });
 
+// Distinct slice palette for the allocation pies.
+const PIE_PALETTE = [
+  "#4ad6ff", "#b794ff", "#22e8a0", "#ffd24a", "#ff9c2a", "#ff5c6c",
+  "#5b8dff", "#3ddc97", "#e879f9", "#f4a261", "#60a5fa", "#94a8c9",
+];
+
+// We don't store sector data, so classify the known holdings by ticker.
+const TICKER_INDUSTRY: Record<string, string> = {
+  NVDA: "Semiconductors", AMD: "Semiconductors",
+  MSFT: "Technology", PLTR: "Technology", PANW: "Technology",
+  AZO: "Consumer", COST: "Consumer", MNST: "Consumer",
+  SPY: "Index ETFs", QQQ: "Index ETFs",
+  GLD: "Commodities",
+};
+
 export default function FinancePage() {
   const [overview, setOverview] = useState<FinanceOverview | null>(null);
   const [income, setIncome] = useState<IncomeSource[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [liabilities, setLiabilities] = useState<Liability[]>([]);
   const [txns, setTxns] = useState<Txn[]>([]);
+  const [statements, setStatements] = useState<EmailCardStatement[]>([]);
+  const [reminders, setReminders] = useState<StatementReminder[]>([]);
+  const [cardSpending, setCardSpending] = useState<CardSpending[]>([]);
 
   async function refresh() {
     const [o, i, a, l, t] = await Promise.all([
@@ -35,6 +54,13 @@ export default function FinancePage() {
       api.get<Txn[]>("/api/finance?limit=20"),
     ]);
     setOverview(o); setIncome(i); setAssets(a); setLiabilities(l); setTxns(t);
+    // Email-derived debts are best-effort — never block the finance view on Gmail.
+    try { setStatements(await api.get<EmailCardStatement[]>("/api/gmail/statements")); }
+    catch { setStatements([]); }
+    try { setReminders(await api.get<StatementReminder[]>("/api/gmail/statement-reminders")); }
+    catch { setReminders([]); }
+    try { setCardSpending(await api.get<CardSpending[]>("/api/gmail/card-spending")); }
+    catch { setCardSpending([]); }
   }
   useEffect(() => { refresh().catch(console.error); }, []);
 
@@ -52,7 +78,10 @@ export default function FinancePage() {
       </div>
 
       <AssetsBlock items={assets} onChange={refresh} />
+      <AllocationBlock items={assets} />
+      <CardsGrid items={cardSpending} reminders={reminders} onChange={refresh} />
       <LiabilitiesBlock items={liabilities} onChange={refresh} />
+      <CardStatementsBlock items={statements} onChange={refresh} />
       <TransactionsBlock items={txns} onChange={refresh} />
     </div>
   );
@@ -174,7 +203,7 @@ function IncomeBlock({ items, onChange }: { items: IncomeSource[]; onChange: () 
       </form>
 
       {items.length === 0 && <div className="text-sm text-jarvis-muted italic">No income sources yet.</div>}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         {items.map(s => (
           <div key={s.id} className="rounded-lg border border-jarvis-border/70 bg-white/[0.02] p-3 flex flex-col gap-2">
             <div className="flex items-start gap-2">
@@ -271,6 +300,10 @@ function AssetsBlock({ items, onChange }: { items: Asset[]; onChange: () => void
   async function patch(a: Asset, body: Partial<Asset>) { await api.patch(`/api/finance/assets/${a.id}`, body); onChange(); }
   async function remove(a: Asset) { await api.del(`/api/finance/assets/${a.id}`); onChange(); }
 
+  const manual = items.filter(a => a.source !== "robinhood");
+  const rh = items.filter(a => a.source === "robinhood").sort((x, y) => (y.value ?? 0) - (x.value ?? 0));
+  const rhTotal = rh.reduce((s, a) => s + (a.value ?? 0), 0);
+
   return (
     <Panel title="Assets">
       <form onSubmit={add} className="grid grid-cols-12 gap-2 mb-3">
@@ -285,26 +318,121 @@ function AssetsBlock({ items, onChange }: { items: Asset[]; onChange: () => void
       </form>
 
       {items.length === 0 && <div className="text-sm text-jarvis-muted italic">No assets logged yet.</div>}
-      <ul className="divide-y divide-jarvis-border/70">
-        {items.map(a => (
-          <li key={a.id} className="py-2.5 flex flex-wrap items-center gap-2 text-sm">
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: CAT_COLOR[a.category] ?? "#4ad6ff" }} />
-            <input className="input !py-1 !px-2 flex-1 min-w-[180px]" defaultValue={a.name}
-                   onBlur={e => e.target.value !== a.name && patch(a, { name: e.target.value })} />
-            <select className="input !py-1 !px-2 w-32" value={a.category} onChange={e => patch(a, { category: e.target.value })}>
-              {ASSET_CATS.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <input className="input !py-1 !px-2 w-28 numeric" type="number" step="0.01" defaultValue={a.value}
-                   onBlur={e => Number(e.target.value) !== a.value && patch(a, { value: Number(e.target.value) })} />
-            <input className="input !py-1 !px-2 w-20" placeholder="ticker" defaultValue={a.ticker ?? ""}
-                   onBlur={e => (e.target.value || null) !== a.ticker && patch(a, { ticker: e.target.value || null })} />
-            <input className="input !py-1 !px-2 w-24 numeric" type="number" step="0.0001" placeholder="shares"
-                   defaultValue={a.shares ?? ""}
-                   onBlur={e => patch(a, { shares: e.target.value ? Number(e.target.value) : null })} />
-            <button onClick={() => remove(a)} className="text-xs text-jarvis-muted hover:text-jarvis-bad">✕</button>
-          </li>
-        ))}
-      </ul>
+
+      {/* Manual assets — editable cards */}
+      {manual.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {manual.map(a => (
+            <div key={a.id} className="rounded-lg border border-jarvis-border/70 bg-white/[0.02] p-3 flex flex-col gap-2">
+              <div className="flex items-start gap-2">
+                <span className="w-2 h-2 rounded-full shrink-0 mt-2.5" style={{ background: CAT_COLOR[a.category] ?? "#4ad6ff" }} />
+                <input className="input !py-1 !px-2 flex-1 text-sm font-medium" defaultValue={a.name}
+                       onBlur={e => e.target.value !== a.name && patch(a, { name: e.target.value })} />
+                <button onClick={() => remove(a)} className="text-xs text-jarvis-muted hover:text-jarvis-bad mt-1.5">✕</button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="text-[10px] tracking-wider text-jarvis-muted mb-0.5">CATEGORY</div>
+                  <select className="input !py-1 !px-2 w-full" value={a.category} onChange={e => patch(a, { category: e.target.value })}>
+                    {ASSET_CATS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div className="text-[10px] tracking-wider text-jarvis-muted mb-0.5">VALUE</div>
+                  <input className="input !py-1 !px-2 w-full numeric" type="number" step="0.01" defaultValue={a.value}
+                         onBlur={e => Number(e.target.value) !== a.value && patch(a, { value: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <div className="text-[10px] tracking-wider text-jarvis-muted mb-0.5">TICKER</div>
+                  <input className="input !py-1 !px-2 w-full" placeholder="—" defaultValue={a.ticker ?? ""}
+                         onBlur={e => (e.target.value || null) !== a.ticker && patch(a, { ticker: e.target.value || null })} />
+                </div>
+                <div>
+                  <div className="text-[10px] tracking-wider text-jarvis-muted mb-0.5">SHARES</div>
+                  <input className="input !py-1 !px-2 w-full numeric" type="number" step="0.0001" placeholder="—"
+                         defaultValue={a.shares ?? ""}
+                         onBlur={e => patch(a, { shares: e.target.value ? Number(e.target.value) : null })} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Robinhood holdings — compact, read-only (auto-synced) */}
+      {rh.length > 0 && (
+        <div className={manual.length > 0 ? "mt-4" : ""}>
+          <div className="flex items-baseline justify-between mb-1.5 px-0.5">
+            <span className="text-[11px] tracking-wider text-jarvis-muted">ROBINHOOD HOLDINGS · {rh.length}</span>
+            <span className="text-[11px] text-jarvis-dim numeric">{$(rhTotal)}</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-x-4 gap-y-2 rounded-lg border border-jarvis-border/70 p-3">
+            {rh.map(a => (
+              <div key={a.id} className="flex items-center gap-2 min-w-0">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: CAT_COLOR[a.category] ?? "#4ad6ff" }} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[12px] font-medium shrink-0">{a.ticker || a.name}</span>
+                    <span className="text-[12px] font-medium numeric text-jarvis-text shrink-0">{$(a.value)}</span>
+                  </div>
+                  <div className="text-[10px] text-jarvis-muted leading-tight truncate">
+                    {[a.ticker ? a.name : null, a.shares ? a.shares.toLocaleString(undefined, { maximumFractionDigits: 2 }) + " sh" : null].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/* ---------------- Allocation (pie charts) ---------------- */
+
+function AllocationBlock({ items }: { items: Asset[] }) {
+  const stocks = items.filter(a => a.category === "stocks" && (a.value ?? 0) > 0);
+  const crypto = items.filter(a => a.category === "crypto" && (a.value ?? 0) > 0);
+
+  // Chart 1: stocks grouped by industry, plus a Crypto slice.
+  const industryMap: Record<string, number> = {};
+  for (const a of stocks) {
+    const ind = (a.ticker && TICKER_INDUSTRY[a.ticker]) || "Other";
+    industryMap[ind] = (industryMap[ind] ?? 0) + (a.value ?? 0);
+  }
+  const cryptoTotal = crypto.reduce((s, a) => s + (a.value ?? 0), 0);
+  if (cryptoTotal > 0) industryMap["Crypto"] = cryptoTotal;
+  const industryData = Object.entries(industryMap)
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, value], i) => ({ label, value, color: PIE_PALETTE[i % PIE_PALETTE.length] }));
+
+  // Chart 2: individual stocks, aggregated by ticker (same ticker across accounts merges).
+  const stockMap: Record<string, number> = {};
+  for (const a of stocks) {
+    const key = a.ticker || a.name;
+    stockMap[key] = (stockMap[key] ?? 0) + (a.value ?? 0);
+  }
+  const stockData = Object.entries(stockMap)
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, value], i) => ({ label, value, color: PIE_PALETTE[i % PIE_PALETTE.length] }));
+
+  if (!industryData.length && !stockData.length) return null;
+
+  const industryTotal = industryData.reduce((s, d) => s + d.value, 0);
+  const stocksOnlyTotal = stockData.reduce((s, d) => s + d.value, 0);
+
+  return (
+    <Panel title="Allocation">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <div className="text-[11px] tracking-wider text-jarvis-muted mb-2">BY INDUSTRY + CRYPTO</div>
+          <PieChart data={industryData} center={$(industryTotal)} />
+        </div>
+        <div>
+          <div className="text-[11px] tracking-wider text-jarvis-muted mb-2">INDIVIDUAL STOCKS</div>
+          <PieChart data={stockData} center={$(stocksOnlyTotal)} />
+        </div>
+      </div>
     </Panel>
   );
 }
@@ -500,6 +628,192 @@ function RobinhoodBlock({ onSynced }: { onSynced: () => void }) {
           Add SNAPTRADE_CLIENT_ID and SNAPTRADE_CONSUMER_KEY to backend/.env, then restart the backend.
         </div>
       )}
+    </Panel>
+  );
+}
+
+/* ---------------- Statement reminders ---------------- */
+// Each issuer's site (main domain → prominent "Log In"; avoids brittle deep links).
+const BANK_LOGIN: Record<string, string> = {
+  "amex": "https://www.americanexpress.com",
+  "american express": "https://www.americanexpress.com",
+  "apple card": "https://card.apple.com",
+  "apple": "https://card.apple.com",
+  "chase": "https://www.chase.com",
+  "discover": "https://www.discover.com",
+  "robinhood": "https://robinhood.com",
+};
+function loginUrl(issuer: string | null): string {
+  const k = (issuer || "").toLowerCase().trim();
+  for (const key of Object.keys(BANK_LOGIN)) if (k.includes(key)) return BANK_LOGIN[key];
+  return `https://www.google.com/search?q=${encodeURIComponent((issuer || "") + " card login")}`;
+}
+
+function CardsGrid({ items, reminders, onChange }: { items: CardSpending[]; reminders: StatementReminder[]; onChange: () => void }) {
+  const remBy = useMemo(() => {
+    const m: Record<number, StatementReminder> = {};
+    reminders.forEach(r => { if (r.liability_id != null) m[r.liability_id] = r; });
+    return m;
+  }, [reminders]);
+  if (items.length === 0) return null;
+  return (
+    <Panel title="Cards & statements">
+      <div className="text-xs text-jarvis-muted mb-3">
+        Each card: balance (click to edit), recent transactions by month, and a drop zone — drop a statement (CSV / Excel / PDF) to load its transactions &amp; balance.
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {items.map(c => <CardBox key={c.liability_id} card={c} rem={remBy[c.liability_id]} onChange={onChange} />)}
+      </div>
+    </Panel>
+  );
+}
+
+function CardBox({ card, rem, onChange }: { card: CardSpending; rem?: StatementReminder; onChange: () => void }) {
+  const months = useMemo(() => {
+    const set = new Set<string>();
+    card.transactions.forEach(t => { if (t.date) set.add(t.date.slice(0, 7)); });
+    return Array.from(set).sort().reverse();
+  }, [card]);
+  const [month, setMonth] = useState("");
+  useEffect(() => { setMonth(months[0] || ""); }, [card.liability_id, months.length]);
+
+  const txns = card.transactions.filter(t => t.date && t.date.slice(0, 7) === month);
+  const monthTotal = txns.reduce((s, t) => s + t.amount, 0);
+
+  const [editing, setEditing] = useState(false);
+  const [bal, setBal] = useState("");
+  const [drag, setDrag] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function saveBal() {
+    const v = parseFloat(bal);
+    if (!isNaN(v)) await api.patch(`/api/finance/liabilities/${card.liability_id}`, { balance: v });
+    setEditing(false); onChange();
+  }
+  async function upload(file: File) {
+    setBusy(true); setMsg(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("liability_id", String(card.liability_id));
+      const res = await fetch("/api/gmail/import-spending", { method: "POST", body: fd });
+      const r = await res.json();
+      setMsg(r.available ? `+${r.transactions_added} txns${r.balance_updated ? ` · $${r.balance}` : ""}` : (r.reason || "failed"));
+      if (r.available) onChange();
+    } catch (e: any) { setMsg(String(e?.message || e)); }
+    finally { setBusy(false); }
+  }
+
+  const dueTxt = rem?.due_date
+    ? new Date(rem.due_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    : (card.due_day_of_month ? `day ${card.due_day_of_month}` : null);
+  const badge = card.source === "email" ? { t: "auto", c: "#22e8a0" }
+    : rem?.needs_update ? { t: "new stmt", c: "#ff9c2a" } : { t: "manual", c: "#94a8c9" };
+
+  return (
+    <div className="panel flex flex-col" style={{ minHeight: 300 }}
+      onDragOver={e => { e.preventDefault(); setDrag(true); }}
+      onDragLeave={() => setDrag(false)}
+      onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files?.[0]; if (f) upload(f); }}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[13px] font-medium text-jarvis-text truncate">{card.name}</div>
+          <div className="text-[10px] text-jarvis-muted">{dueTxt ? `due ${dueTxt}` : "no due date"}</div>
+        </div>
+        <span className="pill shrink-0" style={{ borderColor: badge.c, color: badge.c }}>{badge.t}</span>
+      </div>
+
+      <div className="mt-1 mb-2 flex items-center gap-2">
+        {editing ? (
+          <>
+            <input className="input w-24" inputMode="decimal" placeholder={$(card.balance)} value={bal}
+              onChange={e => setBal(e.target.value)} onKeyDown={e => e.key === "Enter" && saveBal()} autoFocus />
+            <button className="btn" onClick={saveBal}>OK</button>
+          </>
+        ) : (
+          <button className="text-lg font-bold numeric text-jarvis-text hover:text-jarvis-accent"
+            title="click to edit balance" onClick={() => { setBal(""); setEditing(true); }}>{$(card.balance)}</button>
+        )}
+        <a className="ml-auto text-[10px] text-jarvis-accent shrink-0" href={loginUrl(card.name)} target="_blank" rel="noreferrer">log in ↗</a>
+      </div>
+
+      <div className="flex items-center justify-between mb-1">
+        <select className="input text-[11px] py-0.5 px-1" value={month} onChange={e => setMonth(e.target.value)} disabled={months.length === 0}>
+          {months.length === 0 ? <option value="">no transactions</option> : months.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+        {txns.length > 0 && <span className="text-[10px] text-jarvis-muted numeric">{$(monthTotal)} · {txns.length}</span>}
+      </div>
+
+      <div className="flex-1 overflow-auto text-[11px] space-y-0.5 min-h-0 pr-1">
+        {txns.length === 0
+          ? <div className="text-jarvis-muted">No transactions yet.</div>
+          : txns.map((t, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="truncate flex-1 text-jarvis-dim">{t.merchant}</span>
+              <span className="numeric text-jarvis-text shrink-0">{$(t.amount)}</span>
+            </div>
+          ))}
+      </div>
+
+      <label className={`mt-2 block text-center text-[10px] rounded border border-dashed py-2 cursor-pointer transition ${drag ? "border-jarvis-accent bg-jarvis-accent/10 text-jarvis-accent" : "border-jarvis-border text-jarvis-muted hover:border-jarvis-accent/60"}`}>
+        {busy ? "parsing…" : (msg || "⬇ drop statement / click — CSV · Excel · PDF")}
+        <input type="file" accept=".csv,.xlsx,.xlsm,.xls,.pdf" className="hidden" disabled={busy}
+          onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.currentTarget.value = ""; }} />
+      </label>
+    </div>
+  );
+}
+
+/* ---------------- Debts from email ---------------- */
+function CardStatementsBlock({ items, onChange }: { items: EmailCardStatement[]; onChange: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function sync() {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api.post<{ available: boolean; reason?: string; extracted?: number; liabilities_updated?: number }>(
+        "/api/gmail/extract-finances", {});
+      if (r.available) { setMsg(`Parsed ${r.extracted} email(s) · ${r.liabilities_updated} liabilit(ies) updated`); onChange(); }
+      else setMsg(r.reason ?? "Gmail not connected.");
+    } finally { setBusy(false); }
+  }
+
+  const KIND_COLOR: Record<string, string> = { statement: "#ff9c2a", payment: "#22e8a0", other: "#6b7c9a" };
+  const link = (id: string) => `https://mail.google.com/mail/u/0/#all/${id}`;
+
+  return (
+    <Panel title="Debts from email" right={
+      <button className="btn btn-ghost" disabled={busy} onClick={sync}>{busy ? "…" : "SYNC FROM EMAIL"}</button>
+    }>
+      <div className="text-xs text-jarvis-muted mb-2">
+        Balances & due dates parsed from your statement emails. Statement balances feed the Liabilities above (source: email).
+      </div>
+      {msg && <div className="text-xs text-jarvis-dim mb-2">{msg}</div>}
+      {items.length === 0
+        ? <div className="text-sm text-jarvis-muted">Nothing parsed yet — hit SYNC FROM EMAIL (Gmail must be connected).</div>
+        : <div className="space-y-1">
+            {items.map(s => (
+              <a key={s.id} href={link(s.message_id)} target="_blank" rel="noreferrer"
+                className="flex items-center gap-3 py-1.5 border-b border-jarvis-border/40 last:border-0 hover:bg-jarvis-accent/5 rounded px-1">
+                <span className="pill shrink-0" style={{ borderColor: KIND_COLOR[s.kind], color: KIND_COLOR[s.kind] }}>{s.kind}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] text-jarvis-text truncate">
+                    {s.issuer || "Unknown"}{s.last4 ? ` ••${s.last4}` : ""}
+                  </div>
+                  <div className="text-[11px] text-jarvis-muted truncate">{s.subject}</div>
+                </div>
+                <div className="shrink-0 text-right">
+                  {s.balance != null && <div className="text-[13px] numeric text-jarvis-text">{$(s.balance)}</div>}
+                  <div className="text-[10px] text-jarvis-muted">
+                    {s.minimum_payment != null ? `min ${$(s.minimum_payment)}` : ""}
+                    {s.due_date ? ` · due ${new Date(s.due_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>}
     </Panel>
   );
 }

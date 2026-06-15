@@ -19,8 +19,12 @@ async def lifespan(app: FastAPI):
     # Robinhood/SnapTrade unattended sync (no-op until the user signs in once).
     from backend.modules.robinhood import scheduler as robinhood_scheduler
     robinhood_scheduler.start()
+    # Gmail unattended screening (no-op until the user signs in once).
+    from backend.modules.gmail import scheduler as gmail_scheduler
+    gmail_scheduler.start()
     yield
     await robinhood_scheduler.stop()
+    await gmail_scheduler.stop()
 
 
 app = FastAPI(title="Jarvis", version="0.1.0", lifespan=lifespan)

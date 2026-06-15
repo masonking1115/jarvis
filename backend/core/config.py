@@ -8,11 +8,14 @@ _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=str(_ENV_FILE), extra="ignore")
 
-    llm_provider: str = "anthropic"
+    llm_provider: str = "claude_cli"   # claude_cli (Max plan via CLI) | anthropic | openai
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-4-6"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
+    # claude_cli: drives the logged-in Claude Code CLI (Max plan) instead of an API key.
+    claude_cli_path: str = "claude"
+    claude_cli_model: str = "sonnet"   # alias the CLI understands (sonnet | opus | haiku)
 
     database_url: str = "sqlite:///./data/jarvis.db"
     cors_origins: str = "http://localhost:3000"
@@ -32,6 +35,16 @@ class Settings(BaseSettings):
     # any other port returns "authorization request is invalid".
     snaptrade_redirect_port: int = 36987
     snaptrade_sync_interval_min: int = 60
+
+    # Gmail / Google OAuth (Desktop-app client). You create the client in Google
+    # Cloud Console; the id/secret come from the env (never committed). The stored
+    # refresh_token then powers unattended access — same model as SnapTrade above.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    gmail_redirect_port: int = 36988
+    gmail_data_dir: str = "./data/gmail"
+    gmail_sync_interval_min: int = 15   # how often the screening loop polls
+    gmail_backfill: int = 25            # how many recent inbox msgs to screen per run (cap)
 
     @property
     def cors_list(self) -> list[str]:

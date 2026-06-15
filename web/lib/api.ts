@@ -72,6 +72,47 @@ export type Liability = {
   notes: string | null;
   last_updated: string;
   created_at: string;
+  source?: string;
+  external_id?: string | null;
+};
+
+export type EmailCardStatement = {
+  id: number;
+  message_id: string;
+  issuer: string | null;
+  last4: string | null;
+  account_type: string;
+  kind: string;            // statement | payment | other
+  balance: number | null;
+  minimum_payment: number | null;
+  due_date: string | null;
+  apr: number | null;
+  subject: string | null;
+  received_at: string | null;
+};
+
+export type StatementReminder = {
+  issuer: string | null;
+  last4: string | null;
+  due_date: string | null;
+  statement_received_at: string | null;
+  balance_in_email: number | null;
+  emails_balance: boolean;
+  message_id: string;
+  liability_id: number | null;
+  liability_name: string | null;
+  current_balance: number | null;
+  needs_update: boolean;
+};
+
+export type CardTxn = { date: string | null; merchant: string | null; amount: number; category: string };
+export type CardSpending = {
+  liability_id: number;
+  name: string;
+  balance: number;
+  source: string;
+  due_day_of_month: number | null;
+  transactions: CardTxn[];
 };
 
 export type FinanceOverview = {
@@ -97,6 +138,64 @@ export type FinanceOverview = {
 export type FinanceSummary = { income: number; expenses: number; net: number; count: number };
 export type ChatReply = { reply: string; provider: string };
 export type RobinhoodStatus = { configured: boolean; connected: boolean; reason?: string };
+
+export type GmailStatus = {
+  configured: boolean;
+  connected: boolean;
+  reason?: string;
+  email?: string;
+  messages_total?: number;
+  threads_total?: number;
+};
+export type GmailSyncResult = {
+  available: boolean;
+  reason?: string;
+  screened_new?: number;
+  skipped_existing?: number;
+  inbox_seen?: number;
+};
+export type EmailScreening = {
+  id: number;
+  message_id: string;
+  thread_id: string | null;
+  sender: string | null;
+  subject: string | null;
+  snippet: string | null;
+  received_at: string | null;
+  category: string;       // Needs reply | Important | Financial | Newsletter | Other
+  importance: number;     // 0-100
+  summary: string | null;
+  action: string | null;
+};
+export type PriorityRule = { id: number; kind: string; value: string; weight: number };
+export type SpendingSummary = {
+  days: number;
+  total: number;
+  this_month: number;
+  subscriptions_monthly: number;
+  count: number;
+  by_category: { category: string; amount: number; count: number }[];
+  top_merchants: { merchant: string; amount: number; count: number }[];
+  monthly: { month: string; amount: number }[];
+  subscriptions: { merchant: string; amount: number }[];
+  recent: { merchant: string | null; amount: number; category: string; is_subscription: boolean; occurred_at: string; message_id: string; subject: string | null }[];
+};
+export type EmailSource = {
+  email: string;
+  name: string;
+  count: number;
+  category: string;
+  importance: number;
+  latest_message_id: string;
+  latest_at: string | null;
+};
+export type SuppressedSender = { email: string; reason: string; has_filter: boolean; created_at: string | null };
+export type EmailBrief = {
+  day: string;
+  summary: string;
+  stats: { total?: number; needs_reply?: number; financial?: number; by_category?: Record<string, number> };
+  created_at: string | null;
+};
 export type RobinhoodSyncResult = {
   available: boolean;
   reason?: string;

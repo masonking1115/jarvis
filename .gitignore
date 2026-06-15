@@ -22,3 +22,7 @@ out/
 Thumbs.db
 .vscode/
 .idea/
+
+# Logs / build cache
+*.log
+*.tsbuildinfo
