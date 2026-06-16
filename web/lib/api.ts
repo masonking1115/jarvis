@@ -203,3 +203,30 @@ export type RobinhoodSyncResult = {
   transactions_synced?: number;
   portfolio_value?: number;
 };
+
+// ---- Tax vault (local-only document storage) ----
+export type TaxDocument = {
+  id: number;
+  tax_year: number;
+  filename: string;
+  doc_type: string;        // w2 | 1099-b | 1099-int | 1099-div | return | other
+  size_bytes: number;
+  content_type: string | null;
+  uploaded_at: string | null;
+};
+export type TaxList = { documents: TaxDocument[]; years: number[]; doc_types: string[] };
+
+export const tax = {
+  list:   ()                              => api.get<TaxList>("/api/tax"),
+  setType:(id: number, doc_type: string)  => api.patch<TaxDocument>(`/api/tax/${id}`, { doc_type }),
+  remove: (id: number)                    => api.del<{ ok: boolean }>(`/api/tax/${id}`),
+  fileUrl:(id: number, download = false)  => `/api/tax/file/${id}${download ? "?download=true" : ""}`,
+  async upload(year: number, files: File[]): Promise<{ ok: boolean; saved: TaxDocument[]; count: number }> {
+    const fd = new FormData();
+    fd.append("year", String(year));
+    for (const f of files) fd.append("files", f);
+    const res = await fetch("/api/tax/upload", { method: "POST", body: fd });
+    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+    return res.json();
+  },
+};

@@ -26,7 +26,7 @@ export function PieChart({
   });
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center justify-center gap-4" style={{ height: size }}>
       <div className="relative shrink-0" style={{ width: size, height: size }}>
         <svg width={size} height={size} className="-rotate-90">
           <circle cx={size / 2} cy={size / 2} r={r} stroke="#163255" strokeWidth={stroke} fill="none" />
@@ -51,7 +51,7 @@ export function PieChart({
           </div>
         )}
       </div>
-      <ul className="text-[11px] space-y-1 min-w-0 flex-1">
+      <ul className="text-[11px] space-y-1 min-w-0">
         {segs.map((s, i) => (
           <li key={i} className="flex items-center gap-2 min-w-0">
             <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: s.color }} />

@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import {
-  api, Txn, IncomeSource, Asset, Liability, FinanceOverview,
-  RobinhoodStatus, RobinhoodSyncResult, EmailCardStatement, StatementReminder, CardSpending, SpendingSummary,
+  api, tax, Txn, IncomeSource, Asset, Liability, FinanceOverview,
+  RobinhoodStatus, RobinhoodSyncResult, EmailCardStatement, StatementReminder, CardSpending, SpendingSummary, TaxDocument,
 } from "@/lib/api";
 import { Panel } from "@/components/Panel";
 import { PieChart } from "@/components/PieChart";
@@ -83,6 +83,7 @@ export default function FinancePage() {
       <AssetsBlock items={assets} onChange={refresh} />
       <AllocationBlock items={assets} spending={spending} />
       <CardsGrid items={cardSpending} reminders={reminders} onChange={refresh} />
+      <TaxBlock />
       <TransactionsBlock items={txns} onChange={refresh} />
     </div>
   );
@@ -464,6 +465,120 @@ function AllocationBlock({ items, spending }: { items: Asset[]; spending: Spendi
           ) : <div className="text-xs text-jarvis-muted">No spending parsed yet — import statements or connect Gmail.</div>}
         </div>
       </div>
+    </Panel>
+  );
+}
+
+/* ---------------- Tax vault ---------------- */
+const TAX_TYPE_LABEL: Record<string, string> = {
+  w2: "W-2", "1099-b": "1099-B", "1099-int": "1099-INT", "1099-div": "1099-DIV",
+  return: "Return", other: "Other",
+};
+const TAX_TYPE_COLOR: Record<string, string> = {
+  w2: "#4ad6ff", "1099-b": "#b794ff", "1099-int": "#22e8a0", "1099-div": "#3ddc97",
+  return: "#ffd24a", other: "#94a8c9",
+};
+const fmtBytes = (n: number) =>
+  n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+
+function TaxBlock() {
+  const [docs, setDocs] = useState<TaxDocument[]>([]);
+  const [serverYears, setServerYears] = useState<number[]>([]);
+  const [types, setTypes] = useState<string[]>(Object.keys(TAX_TYPE_LABEL));
+  const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [drag, setDrag] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function refresh() {
+    const r = await tax.list();
+    setDocs(r.documents); setServerYears(r.years);
+    if (r.doc_types?.length) setTypes(r.doc_types);
+  }
+  useEffect(() => { refresh().catch(() => {}); }, []);
+
+  // Always offer this year + last year, plus any year that has docs.
+  const thisYear = new Date().getFullYear();
+  const years = Array.from(new Set([thisYear, thisYear - 1, ...serverYears])).sort((a, b) => b - a);
+  const shown = docs.filter(d => d.tax_year === year);
+
+  async function uploadFiles(files: FileList | File[]) {
+    const list = Array.from(files);
+    if (!list.length) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await tax.upload(year, list);
+      setMsg(`Added ${r.count} file(s) to ${year}`);
+    } catch { setMsg("Upload failed"); }
+    setBusy(false);
+    refresh();
+  }
+  async function changeType(id: number, t: string) {
+    await tax.setType(id, t); refresh();
+  }
+  async function remove(d: TaxDocument) {
+    if (!window.confirm(`Delete "${d.filename}"? This permanently removes the file.`)) return;
+    await tax.remove(d.id); refresh();
+  }
+  function addYear() {
+    const v = window.prompt("Add a tax year (e.g. 2024):", String(thisYear - 1));
+    const n = v && parseInt(v, 10);
+    if (n && n > 1990 && n < 2100) setYear(n);
+  }
+
+  return (
+    <Panel title="Tax documents — local vault">
+      <div className="text-xs text-jarvis-muted mb-3">
+        Upload W-2s, 1099s and prior returns. Files are stored only on this machine (never uploaded anywhere, never sent to the LLM) and organized by tax year.
+      </div>
+
+      {/* year tabs */}
+      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+        {years.map(y => (
+          <button key={y} onClick={() => setYear(y)}
+            className={`px-3 py-1 rounded text-[13px] font-medium transition ${
+              y === year ? "bg-jarvis-accent/20 text-jarvis-accent border border-jarvis-accent/60"
+                         : "bg-jarvis-border/20 text-jarvis-dim hover:text-jarvis-text border border-transparent"}`}>
+            {y}{docs.some(d => d.tax_year === y) ? ` · ${docs.filter(d => d.tax_year === y).length}` : ""}
+          </button>
+        ))}
+        <button onClick={addYear} className="px-2 py-1 rounded text-[13px] text-jarvis-muted hover:text-jarvis-accent">+ year</button>
+      </div>
+
+      {/* document list for the selected year */}
+      <div className="space-y-1.5">
+        {shown.length === 0
+          ? <div className="text-[12px] text-jarvis-muted">No documents for {year} yet — drop files below.</div>
+          : shown.map(d => (
+            <div key={d.id} className="flex items-center gap-3 rounded px-3 py-2 bg-jarvis-border/20">
+              <span className="pill shrink-0" style={{ borderColor: TAX_TYPE_COLOR[d.doc_type] || "#94a8c9", color: TAX_TYPE_COLOR[d.doc_type] || "#94a8c9" }}>
+                {TAX_TYPE_LABEL[d.doc_type] || d.doc_type}
+              </span>
+              <a className="text-[13px] text-jarvis-text hover:text-jarvis-accent truncate min-w-0 flex-1"
+                href={tax.fileUrl(d.id)} target="_blank" rel="noreferrer" title="open">{d.filename}</a>
+              <span className="text-[11px] text-jarvis-muted shrink-0 numeric">{fmtBytes(d.size_bytes)}</span>
+              <select className="input !py-0.5 !px-1 text-[11px] shrink-0" value={d.doc_type}
+                onChange={e => changeType(d.id, e.target.value)} title="document type">
+                {types.map(t => <option key={t} value={t}>{TAX_TYPE_LABEL[t] || t}</option>)}
+              </select>
+              <a className="text-[11px] text-jarvis-accent shrink-0" href={tax.fileUrl(d.id, true)}>download</a>
+              <button className="text-[11px] text-jarvis-bad hover:underline shrink-0" onClick={() => remove(d)}>delete</button>
+            </div>
+          ))}
+      </div>
+
+      {/* drop zone */}
+      <label
+        onDragOver={e => { e.preventDefault(); setDrag(true); }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={e => { e.preventDefault(); setDrag(false); if (e.dataTransfer.files?.length) uploadFiles(e.dataTransfer.files); }}
+        className={`mt-3 block text-center text-[14px] font-semibold rounded border border-dashed py-4 cursor-pointer transition ${
+          drag ? "border-jarvis-accent bg-jarvis-accent/10 text-jarvis-accent"
+               : "border-jarvis-border text-jarvis-text hover:border-jarvis-accent/60"}`}>
+        {busy ? "uploading…" : (msg || `⬇ Drop tax files for ${year} — or click to choose`)}
+        <input type="file" multiple className="hidden" disabled={busy}
+          onChange={e => { if (e.target.files?.length) uploadFiles(e.target.files); e.currentTarget.value = ""; }} />
+      </label>
     </Panel>
   );
 }
