@@ -16,6 +16,20 @@ function isTypingTarget(el: EventTarget | null): boolean {
 
 export function FlyoverProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+
+  // Auto-open when arriving from the intro (router.push("/dashboard?flyover=1")),
+  // then strip the flag so it doesn't re-trigger on refresh.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("flyover") === "1") {
+      setOpen(true);
+      sp.delete("flyover");
+      const qs = sp.toString();
+      window.history.replaceState(null, "", window.location.pathname + (qs ? `?${qs}` : ""));
+    }
+  }, []);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return;

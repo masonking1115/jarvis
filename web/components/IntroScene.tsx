@@ -68,6 +68,18 @@ export function IntroScene() {
     return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
   }, []);
 
+  // From the intro only: Esc or Space jumps straight into the map (flyover) view.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" || e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        router.push("/dashboard?flyover=1");
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [router]);
+
   return (
     <div className="fixed inset-0 overflow-hidden bg-[#04080f] grid-bg">
       {/* particles (decorative) */}
