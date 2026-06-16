@@ -175,7 +175,16 @@ export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }
           backdrop on ALL four sides (a radial gradient only darkens corners,
           which is why the earlier version showed "no taper"). */}
       <div className="pointer-events-none absolute inset-0"
-        style={{ boxShadow: "inset 0 0 48px 60px #04080f" }} />
+        style={{ boxShadow: "inset 0 0 96px 120px #04080f" }} />
+      {/* grid lines on the tapered border (same grid as the intro), fading inward */}
+      <div className="pointer-events-none absolute top-0 inset-x-0 grid-bg"
+        style={{ height: 240, WebkitMaskImage: "linear-gradient(to bottom, #000, #000 45%, transparent)", maskImage: "linear-gradient(to bottom, #000, #000 45%, transparent)" }} />
+      <div className="pointer-events-none absolute bottom-0 inset-x-0 grid-bg"
+        style={{ height: 240, WebkitMaskImage: "linear-gradient(to top, #000, #000 45%, transparent)", maskImage: "linear-gradient(to top, #000, #000 45%, transparent)" }} />
+      <div className="pointer-events-none absolute left-0 inset-y-0 grid-bg"
+        style={{ width: 240, WebkitMaskImage: "linear-gradient(to right, #000, #000 45%, transparent)", maskImage: "linear-gradient(to right, #000, #000 45%, transparent)" }} />
+      <div className="pointer-events-none absolute right-0 inset-y-0 grid-bg"
+        style={{ width: 240, WebkitMaskImage: "linear-gradient(to left, #000, #000 45%, transparent)", maskImage: "linear-gradient(to left, #000, #000 45%, transparent)" }} />
       {/* Dashboard-style chrome: cyan panel border + corner cuts framing the view */}
       <div className="pointer-events-none absolute inset-2 rounded-[14px] corner-cuts"
         style={{
