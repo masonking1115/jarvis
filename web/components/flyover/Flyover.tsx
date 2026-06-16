@@ -4,6 +4,7 @@ import { loadCesium } from "@/lib/cesium";
 import { flyover, FlyoverConfig, FlyoverWeather } from "@/lib/api";
 import { weatherToEffects } from "@/lib/weatherEffects";
 import { applyEffects } from "./effects";
+import { JarvisLogo } from "@/components/JarvisLogo";
 
 const ORBIT_RATE = 0.0006;    // radians/frame — slow cinematic orbit
 const ORBIT_RANGE = 250;      // meters from the point — frames the property
@@ -146,6 +147,16 @@ export function Flyover({ open }: { open: boolean }) {
       className={`fixed inset-0 z-[100] bg-jarvis-bg transition-opacity duration-500 ${
         open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}>
       <div ref={containerRef} className="absolute inset-0" />
+      {/* Dashboard-style chrome: cyan panel border + corner cuts framing the view */}
+      <div className="pointer-events-none absolute inset-2 rounded-[14px] corner-cuts"
+        style={{
+          border: "1px solid rgba(74, 214, 255, 0.35)",
+          boxShadow: "inset 0 0 60px rgba(74, 214, 255, 0.10), 0 0 30px rgba(74, 214, 255, 0.15)",
+        }} />
+      {/* JARVIS orb, pulsating, bottom-right */}
+      <div className="pointer-events-none absolute bottom-6 right-6 ring-breathe" aria-hidden>
+        <JarvisLogo size={76} />
+      </div>
       {/* HUD */}
       <div className="absolute top-4 left-4 panel !bg-jarvis-panel/70 backdrop-blur px-4 py-3 max-w-xs">
         <div className="text-[13px] font-medium text-jarvis-text truncate">{hudAddress}</div>
@@ -161,7 +172,7 @@ export function Flyover({ open }: { open: boolean }) {
         </div>
       </div>
       {status && <div className="absolute bottom-6 left-1/2 -translate-x-1/2 panel px-4 py-2 text-sm text-jarvis-dim">{status}</div>}
-      <div className="absolute bottom-4 right-4 text-[11px] text-jarvis-muted">Esc to exit</div>
+      <div className="absolute bottom-5 left-6 text-[11px] text-jarvis-muted tracking-wider">ESC TO EXIT</div>
       {showGear && (
         <div className="absolute top-4 left-4 mt-28 panel px-4 py-3">
           <input className="input w-64" placeholder="Enter an address or city"
