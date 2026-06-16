@@ -231,3 +231,34 @@ export const tax = {
     return res.json();
   },
 };
+
+// ---- Flyover (photoreal address view) ----
+export type FlyoverConfig = {
+  available: boolean;
+  reason?: string;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  units: string;
+  google_maps_key: string;
+  has_weather: boolean;
+};
+export type FlyoverWeather = {
+  available: boolean;
+  reason?: string;
+  main?: string;          // Clear | Clouds | Rain | Drizzle | Snow | Thunderstorm | Mist | Fog | Haze
+  description?: string;
+  temp?: number | null;
+  clouds_pct?: number;
+  wind_mps?: number;
+  raw_id?: number | null;
+  is_day?: boolean;
+};
+
+export const flyover = {
+  config:  ()                 => api.get<FlyoverConfig>("/api/flyover/config"),
+  weather: ()                 => api.get<FlyoverWeather>("/api/flyover/weather"),
+  setLocation: (address: string) =>
+    api.post<{ ok: boolean; reason?: string; address?: string; lat?: number; lng?: number }>(
+      "/api/flyover/location", { address }),
+};
