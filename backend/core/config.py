@@ -1,4 +1,5 @@
 from pathlib import Path
+from pydantic import Field, AliasChoices
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Absolute path to backend/.env so the file is found regardless of CWD.
@@ -50,7 +51,11 @@ class Settings(BaseSettings):
     # browser (Cesium fetches Google tiles directly); restrict it to localhost
     # referrers. OpenWeather key stays server-side (geocode + current weather).
     google_maps_api_key: str = ""
-    openweather_api_key: str = ""
+    # Accept either OPENWEATHER_API_KEY or OPENWEATHERMAP_API_KEY in .env.
+    openweather_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("openweather_api_key", "openweathermap_api_key"),
+    )
     flyover_default_units: str = "imperial"   # imperial | metric
     # Default location shown until the user sets one (via the in-app gear). Change
     # these in .env to point the flyover somewhere else out of the box.

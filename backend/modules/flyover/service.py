@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from datetime import datetime
+
+import httpx
 from sqlalchemy.orm import Session
 
 from backend.core.config import settings
@@ -59,5 +61,10 @@ def current_weather(db: Session, lat: float | None = None, lng: float | None = N
         return {"available": True, **weather.current(la, ln, s.units or "imperial")}
     except weather.WeatherNotConfigured as e:
         return {"available": False, "reason": str(e)}
-    except Exception as e:  # noqa: BLE001
-        return {"available": False, "reason": f"weather error: {e}"}
+    except httpx.HTTPStatusError as e:
+        # Never echo the error's URL — it carries the appid (the API key).
+        code = e.response.status_code
+        hint = " — new OpenWeather keys take up to ~2h to activate" if code == 401 else ""
+        return {"available": False, "reason": f"weather provider returned {code}{hint}"}
+    except Exception:  # noqa: BLE001 — keep the key out of any error string
+        return {"available": False, "reason": "weather lookup failed"}
