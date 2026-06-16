@@ -220,6 +220,7 @@ export const tax = {
   list:   ()                              => api.get<TaxList>("/api/tax"),
   setType:(id: number, doc_type: string)  => api.patch<TaxDocument>(`/api/tax/${id}`, { doc_type }),
   remove: (id: number)                    => api.del<{ ok: boolean }>(`/api/tax/${id}`),
+  expand: (id: number)                    => api.post<{ ok: boolean; expanded: TaxDocument[]; count: number }>(`/api/tax/${id}/expand`, {}),
   fileUrl:(id: number, download = false)  => `/api/tax/file/${id}${download ? "?download=true" : ""}`,
   async upload(year: number, files: File[]): Promise<{ ok: boolean; saved: TaxDocument[]; count: number }> {
     const fd = new FormData();

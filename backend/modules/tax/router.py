@@ -16,7 +16,37 @@ from . import storage
 
 router = APIRouter()
 
-DOC_TYPES = ["w2", "1099-b", "1099-int", "1099-div", "return", "other"]
+DOC_TYPES = ["w2", "1099-b", "1099-int", "1099-div", "1098", "return", "other"]
+
+
+def _store(db: Session, year: int, name: str, content_type: str | None, blob: bytes) -> list[dict]:
+    """Persist one upload. If it's a zip, expand it into individual documents;
+    otherwise store the file as-is. Returns the created document(s)."""
+    if storage.is_zip(name, content_type):
+        try:
+            entries = storage.extract_zip(blob)
+        except Exception:  # noqa: BLE001 — not a valid zip; fall back to storing the blob
+            entries = []
+        if entries:
+            return [_persist(db, year, fn, None, data) for fn, data in entries]
+    return [_persist(db, year, name, content_type, blob)]
+
+
+def _persist(db: Session, year: int, name: str, content_type: str | None, blob: bytes) -> dict:
+    stored_name, size = storage.save(year, name or "file", blob)
+    doc = TaxDocument(
+        tax_year=int(year),
+        filename=(name or "file")[:255],
+        doc_type=storage.guess_doc_type(name or ""),
+        stored_name=stored_name,
+        size_bytes=size,
+        content_type=content_type,
+        uploaded_at=datetime.utcnow(),
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    return _out(doc)
 
 
 def _out(d: TaxDocument) -> dict:
@@ -46,27 +76,36 @@ async def upload(
     year: int = Form(...),
     db: Session = Depends(get_db),
 ):
-    """Store one or more files into the given tax year. Accepts any file type."""
+    """Store one or more files into the given tax year. Accepts any file type;
+    a .zip is automatically expanded into its individual documents."""
     saved: list[dict] = []
     for f in files:
         blob = await f.read()
         if not blob:
             continue
-        stored_name, size = storage.save(year, f.filename or "file", blob)
-        doc = TaxDocument(
-            tax_year=int(year),
-            filename=(f.filename or "file")[:255],
-            doc_type=storage.guess_doc_type(f.filename or ""),
-            stored_name=stored_name,
-            size_bytes=size,
-            content_type=f.content_type,
-            uploaded_at=datetime.utcnow(),
-        )
-        db.add(doc)
-        db.commit()
-        db.refresh(doc)
-        saved.append(_out(doc))
+        saved.extend(_store(db, year, f.filename or "file", f.content_type, blob))
     return {"ok": True, "saved": saved, "count": len(saved)}
+
+
+@router.post("/{doc_id}/expand")
+def expand(doc_id: int, db: Session = Depends(get_db)):
+    """Unpack an already-stored zip into individual documents, then remove the zip."""
+    doc = db.get(TaxDocument, doc_id)
+    if not doc:
+        raise HTTPException(404, "document not found")
+    if not storage.is_zip(doc.filename, doc.content_type):
+        raise HTTPException(400, "document is not a zip")
+    path = storage.path_for(doc.tax_year, doc.stored_name)
+    if not path.exists():
+        raise HTTPException(404, "file missing on disk")
+    created = _store(db, doc.tax_year, doc.filename, doc.content_type, path.read_bytes())
+    # Only drop the wrapper once we actually extracted something.
+    expanded = [d for d in created if d["id"] != doc.id]
+    if expanded:
+        storage.delete(doc.tax_year, doc.stored_name)
+        db.delete(doc)
+        db.commit()
+    return {"ok": True, "expanded": expanded, "count": len(expanded)}
 
 
 class DocTypeIn(BaseModel):

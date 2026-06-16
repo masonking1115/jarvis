@@ -472,11 +472,11 @@ function AllocationBlock({ items, spending }: { items: Asset[]; spending: Spendi
 /* ---------------- Tax vault ---------------- */
 const TAX_TYPE_LABEL: Record<string, string> = {
   w2: "W-2", "1099-b": "1099-B", "1099-int": "1099-INT", "1099-div": "1099-DIV",
-  return: "Return", other: "Other",
+  "1098": "1098", return: "Return", other: "Other",
 };
 const TAX_TYPE_COLOR: Record<string, string> = {
   w2: "#4ad6ff", "1099-b": "#b794ff", "1099-int": "#22e8a0", "1099-div": "#3ddc97",
-  return: "#ffd24a", other: "#94a8c9",
+  "1098": "#ff9c2a", return: "#ffd24a", other: "#94a8c9",
 };
 const fmtBytes = (n: number) =>
   n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`;
@@ -520,6 +520,12 @@ function TaxBlock() {
     if (!window.confirm(`Delete "${d.filename}"? This permanently removes the file.`)) return;
     await tax.remove(d.id); refresh();
   }
+  async function expand(d: TaxDocument) {
+    setBusy(true); setMsg(null);
+    try { const r = await tax.expand(d.id); setMsg(`Unpacked ${r.count} file(s)`); }
+    catch { setMsg("Could not unpack zip"); }
+    setBusy(false); refresh();
+  }
   function addYear() {
     const v = window.prompt("Add a tax year (e.g. 2024):", String(thisYear - 1));
     const n = v && parseInt(v, 10);
@@ -549,22 +555,29 @@ function TaxBlock() {
       <div className="space-y-1.5">
         {shown.length === 0
           ? <div className="text-[12px] text-jarvis-muted">No documents for {year} yet — drop files below.</div>
-          : shown.map(d => (
+          : shown.map(d => {
+            const isZip = d.filename.toLowerCase().endsWith(".zip");
+            return (
             <div key={d.id} className="flex items-center gap-3 rounded px-3 py-2 bg-jarvis-border/20">
-              <span className="pill shrink-0" style={{ borderColor: TAX_TYPE_COLOR[d.doc_type] || "#94a8c9", color: TAX_TYPE_COLOR[d.doc_type] || "#94a8c9" }}>
-                {TAX_TYPE_LABEL[d.doc_type] || d.doc_type}
+              <span className="pill shrink-0" style={{ borderColor: isZip ? "#ffb547" : (TAX_TYPE_COLOR[d.doc_type] || "#94a8c9"), color: isZip ? "#ffb547" : (TAX_TYPE_COLOR[d.doc_type] || "#94a8c9") }}>
+                {isZip ? "ZIP" : (TAX_TYPE_LABEL[d.doc_type] || d.doc_type)}
               </span>
               <a className="text-[13px] text-jarvis-text hover:text-jarvis-accent truncate min-w-0 flex-1"
                 href={tax.fileUrl(d.id)} target="_blank" rel="noreferrer" title="open">{d.filename}</a>
               <span className="text-[11px] text-jarvis-muted shrink-0 numeric">{fmtBytes(d.size_bytes)}</span>
-              <select className="input !py-0.5 !px-1 text-[11px] shrink-0" value={d.doc_type}
-                onChange={e => changeType(d.id, e.target.value)} title="document type">
-                {types.map(t => <option key={t} value={t}>{TAX_TYPE_LABEL[t] || t}</option>)}
-              </select>
+              {isZip ? (
+                <button className="text-[11px] text-jarvis-accent font-medium shrink-0" disabled={busy} onClick={() => expand(d)}>unpack ↧</button>
+              ) : (
+                <select className="input !py-0.5 !px-1 text-[11px] shrink-0" value={d.doc_type}
+                  onChange={e => changeType(d.id, e.target.value)} title="document type">
+                  {types.map(t => <option key={t} value={t}>{TAX_TYPE_LABEL[t] || t}</option>)}
+                </select>
+              )}
               <a className="text-[11px] text-jarvis-accent shrink-0" href={tax.fileUrl(d.id, true)}>download</a>
               <button className="text-[11px] text-jarvis-bad hover:underline shrink-0" onClick={() => remove(d)}>delete</button>
             </div>
-          ))}
+            );
+          })}
       </div>
 
       {/* drop zone */}

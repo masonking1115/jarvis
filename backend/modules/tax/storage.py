@@ -5,7 +5,9 @@ JARVIS (gmail tokens, sqlite db). Local-only: nothing leaves the machine.
 """
 from __future__ import annotations
 
+import io
 import re
+import zipfile
 from pathlib import Path
 from uuid import uuid4
 
@@ -71,8 +73,35 @@ def guess_doc_type(filename: str) -> str:
         return "1099-int"
     if "1099-div" in n or "1099div" in n:
         return "1099-div"
+    if "robinhood" in n:           # brokerage consolidated 1099
+        return "1099-b"
     if "1099" in n:
         return "1099-int"
+    if "1098" in n or "edfinancial" in n or "student" in n:  # student-loan interest
+        return "1098"
     if "1040" in n or "return" in n:
         return "return"
     return "other"
+
+
+def is_zip(filename: str | None, content_type: str | None) -> bool:
+    name = (filename or "").lower()
+    ct = (content_type or "").lower()
+    return name.endswith(".zip") or "zip" in ct
+
+
+def extract_zip(blob: bytes) -> list[tuple[str, bytes]]:
+    """Return (filename, bytes) for each real file in a zip.
+    Skips directories, macOS metadata, and dotfiles."""
+    out: list[tuple[str, bytes]] = []
+    with zipfile.ZipFile(io.BytesIO(blob)) as z:
+        for info in z.infolist():
+            if info.is_dir():
+                continue
+            base = Path(info.filename).name
+            if not base or base.startswith(".") or "__MACOSX" in info.filename:
+                continue
+            data = z.read(info)
+            if data:
+                out.append((base, data))
+    return out
