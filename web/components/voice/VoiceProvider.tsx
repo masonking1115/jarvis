@@ -6,10 +6,12 @@ import { createRecognizer, extractCommand, speechSupported, Recognizer } from "@
 type State = "disabled" | "idle" | "capturing" | "thinking" | "speaking";
 type Msg = { role: "user" | "assistant"; content: string };
 
+type Ref0 = { current: number };
 const Ctx = createContext<{
   enabled: boolean; setEnabled: (v: boolean) => void;
   state: State; lastHeard: string; lastSpoken: string; supported: boolean;
-}>({ enabled: false, setEnabled: () => {}, state: "disabled", lastHeard: "", lastSpoken: "", supported: false });
+  levelRef: Ref0;   // live audio level 0..1 (mic while listening, TTS while speaking)
+}>({ enabled: false, setEnabled: () => {}, state: "disabled", lastHeard: "", lastSpoken: "", supported: false, levelRef: { current: 0 } });
 
 export const useVoice = () => useContext(Ctx);
 
@@ -27,6 +29,54 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const msgsRef = useRef<Msg[]>([]);
   const set = (s: State) => { stateRef.current = s; setState(s); };
 
+  // ---- live audio level meter (drives the orb) ----
+  const levelRef = useRef(0);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const micAnalyserRef = useRef<AnalyserNode | null>(null);
+  const speakAnalyserRef = useRef<AnalyserNode | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  function rms(an: AnalyserNode, buf: Uint8Array): number {
+    an.getByteTimeDomainData(buf);
+    let s = 0;
+    for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; s += v * v; }
+    return Math.min(1, Math.sqrt(s / buf.length) * 3);
+  }
+
+  async function startMeter() {
+    if (ctxRef.current) return;
+    try {
+      const Ctor = (window as any).AudioContext || (window as any).webkitAudioContext;
+      const ctx: AudioContext = new Ctor();
+      ctxRef.current = ctx;
+      const mic = ctx.createAnalyser(); mic.fftSize = 512; mic.smoothingTimeConstant = 0.8;
+      micAnalyserRef.current = mic;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      micStreamRef.current = stream;
+      ctx.createMediaStreamSource(stream).connect(mic);   // analyser only — not to destination (no playback)
+      const buf = new Uint8Array(mic.frequencyBinCount);
+      const loop = () => {
+        let lvl = rms(mic, buf);
+        if (speakAnalyserRef.current) lvl = Math.max(lvl, rms(speakAnalyserRef.current, buf));
+        levelRef.current = levelRef.current * 0.6 + lvl * 0.4;   // smooth
+        rafRef.current = requestAnimationFrame(loop);
+      };
+      loop();
+    } catch { /* meter unavailable — orb still breathes */ }
+  }
+
+  function stopMeter() {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    micStreamRef.current?.getTracks().forEach(t => t.stop());
+    micStreamRef.current = null;
+    speakAnalyserRef.current = null;
+    ctxRef.current?.close().catch(() => {});
+    ctxRef.current = null; micAnalyserRef.current = null;
+    levelRef.current = 0;
+  }
+
   function stopAudio() {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
   }
@@ -34,8 +84,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   function setEnabled(v: boolean) {
     enabledRef.current = v; setEnabledState(v);
     if (typeof window !== "undefined") localStorage.setItem("jarvisVoice", v ? "1" : "0");
-    if (v) { set("idle"); recRef.current?.start(); }
-    else { set("disabled"); recRef.current?.stop(); stopAudio(); }
+    if (v) { set("idle"); recRef.current?.start(); startMeter(); }
+    else { set("disabled"); recRef.current?.stop(); stopAudio(); stopMeter(); }
   }
 
   async function handle(text: string) {
@@ -58,9 +108,20 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     const url = await voiceApi.tts(text).catch(() => null);
     if (!url) { set("idle"); return; }                 // no Azure key → caption only
     const a = new Audio(url); audioRef.current = a;
-    a.onended = () => { stopAudio(); set("idle"); };
-    a.onerror = () => { stopAudio(); set("idle"); };
-    a.play().catch(() => { stopAudio(); set("idle"); });
+    // Route playback through the analyser so the orb reacts to JARVIS's voice.
+    try {
+      const ctx = ctxRef.current;
+      if (ctx) {
+        const src = ctx.createMediaElementSource(a);
+        const an = ctx.createAnalyser(); an.fftSize = 512; an.smoothingTimeConstant = 0.8;
+        src.connect(an); src.connect(ctx.destination);   // analyse + play
+        speakAnalyserRef.current = an;
+      }
+    } catch { /* analysis optional */ }
+    const done = () => { speakAnalyserRef.current = null; stopAudio(); set("idle"); };
+    a.onended = done;
+    a.onerror = done;
+    a.play().catch(done);
   }
 
   function onFinal(text: string) {
@@ -93,7 +154,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   }, [supported]);
 
   return (
-    <Ctx.Provider value={{ enabled, setEnabled, state, lastHeard, lastSpoken, supported }}>
+    <Ctx.Provider value={{ enabled, setEnabled, state, lastHeard, lastSpoken, supported, levelRef }}>
       {children}
     </Ctx.Provider>
   );

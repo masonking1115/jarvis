@@ -1,28 +1,19 @@
 "use client";
-import { JarvisOrb } from "@/components/JarvisOrb";
 import { useVoice } from "./VoiceProvider";
 
-const CAPTION: Record<string, string> = {
-  idle: "Listening for “Hey JARVIS”", capturing: "Listening…",
-  thinking: "Thinking…", speaking: "", disabled: "",
-};
-
+// Caption that floats just above the ambient orb during a conversation.
+// The orb itself (AmbientOrb) is the visual; this is just the transcript/status.
 export function VoiceIndicator() {
   const { enabled, state, lastHeard, lastSpoken } = useVoice();
   if (!enabled) return null;
   const caption =
     state === "speaking" ? lastSpoken :
-    state === "capturing" && lastHeard ? lastHeard :
-    CAPTION[state];
-  const op = state === "idle" ? 0.5 : 1;
+    state === "capturing" ? (lastHeard || "Listening…") :
+    state === "thinking" ? "Thinking…" : "";
+  if (!caption) return null;
   return (
-    <div className="fixed bottom-4 left-4 z-[80] flex items-center gap-3 pointer-events-none">
-      <div className={state === "thinking" ? "ring-breathe" : ""} style={{ opacity: op }}>
-        <JarvisOrb className="w-16 h-16" />
-      </div>
-      {caption && (
-        <div className="panel !py-1.5 !px-3 max-w-xs text-[12px] text-jarvis-dim">{caption}</div>
-      )}
+    <div className="pointer-events-none fixed bottom-[268px] left-1/2 -translate-x-1/2 z-[6] w-[90vw] max-w-md px-4">
+      <div className="panel !py-2 !px-4 text-[13px] text-jarvis-dim text-center">{caption}</div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { HeaderBar } from "@/components/HeaderBar";
 import { FlyoverProvider } from "@/components/flyover/FlyoverProvider";
 import { VoiceProvider } from "@/components/voice/VoiceProvider";
 import { VoiceIndicator } from "@/components/voice/VoiceIndicator";
+import { AmbientOrb } from "@/components/voice/AmbientOrb";
 
 export default function ConsoleLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -16,6 +17,8 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
           </div>
         </div>
       </FlyoverProvider>
+      {/* Persistent JARVIS sphere on every tab — voice-reactive, glides to center while talking */}
+      <AmbientOrb />
       <VoiceIndicator />
     </VoiceProvider>
   );
