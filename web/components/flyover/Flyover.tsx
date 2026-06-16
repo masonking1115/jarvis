@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadCesium } from "@/lib/cesium";
 import { flyover, FlyoverConfig, FlyoverWeather } from "@/lib/api";
-import { weatherToEffects, nightFactor } from "@/lib/weatherEffects";
+import { weatherToEffects } from "@/lib/weatherEffects";
 import { applyEffects } from "./effects";
 import { JarvisOrb } from "@/components/JarvisOrb";
 
@@ -33,7 +33,6 @@ export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }
   const builtRef = useRef(false);
   const [cfg, setCfg] = useState<FlyoverConfig | null>(null);
   const [wx, setWx] = useState<FlyoverWeather | null>(null);
-  const [night, setNight] = useState(0);   // 0 = day, 1 = night (drives the dark tint)
   const [hudAddress, setHudAddress] = useState<string>("Flyover");
   const [status, setStatus] = useState<string>("");
   const [showGear, setShowGear] = useState(false);
@@ -43,7 +42,6 @@ export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }
     const c = coordsRef.current;
     const w = await flyover.weather(c?.lat, c?.lng).catch(() => null);
     setWx(w);
-    setNight(nightFactor(w));
     const v = viewerRef.current;
     if (v) applyEffects((window as any).Cesium, v.scene, weatherToEffects(w));
   }
@@ -173,17 +171,14 @@ export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }
         style={{ background: "radial-gradient(60% 60% at 50% 50%, rgba(74,214,255,0.08), transparent 70%), radial-gradient(40% 40% at 50% 50%, rgba(74,214,255,0.05), transparent 70%)" }} />
       {/* the map */}
       <div ref={containerRef} className="absolute inset-0" />
-      {/* night tint — darkens the (daytime) tiles toward dusk/night based on the sun */}
-      <div className="pointer-events-none absolute inset-0 transition-opacity duration-1000"
-        style={{ background: "radial-gradient(80% 80% at 50% 45%, rgba(6,12,32,0.85), rgba(2,5,16,0.95))", opacity: night * 0.72 }} />
-      {/* dark edge vignette — fades the map into the background colour */}
+      {/* dark edge vignette — harsh taper: map holds full, then drops to bg near the edge */}
       <div className="pointer-events-none absolute inset-0"
-        style={{ background: "radial-gradient(ellipse 78% 80% at 50% 50%, transparent 52%, #04080f 90%)" }} />
-      {/* grid lines fading IN toward the edges, so the map dissolves into the grid */}
+        style={{ background: "radial-gradient(ellipse 96% 96% at 50% 50%, transparent 88%, #04080f 99%)" }} />
+      {/* grid lines snapping IN at the very edges, so the map dissolves into the grid */}
       <div className="pointer-events-none absolute inset-0 grid-bg"
         style={{
-          WebkitMaskImage: "radial-gradient(ellipse 85% 85% at 50% 50%, transparent 55%, #000 92%)",
-          maskImage: "radial-gradient(ellipse 85% 85% at 50% 50%, transparent 55%, #000 92%)",
+          WebkitMaskImage: "radial-gradient(ellipse 97% 97% at 50% 50%, transparent 90%, #000 99%)",
+          maskImage: "radial-gradient(ellipse 97% 97% at 50% 50%, transparent 90%, #000 99%)",
         }} />
       {/* Dashboard-style chrome: cyan panel border + corner cuts framing the view */}
       <div className="pointer-events-none absolute inset-2 rounded-[14px] corner-cuts"
