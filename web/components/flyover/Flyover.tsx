@@ -8,7 +8,8 @@ import { applyEffects } from "./effects";
 import { JarvisOrb } from "@/components/JarvisOrb";
 
 const ORBIT_RATE = 0.0006;    // radians/frame — slow cinematic orbit
-const ORBIT_RANGE = 200;      // meters from the point — frames the property
+const DEFAULT_RANGE = 200;    // meters from the point — frames the property
+const MIN_RANGE = 80, MAX_RANGE = 1200;
 const ORBIT_PITCH = -28;      // degrees below horizontal (oblique aerial)
 
 type Loc = { lat: number; lng: number };
@@ -31,6 +32,8 @@ export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }
   const viewerRef = useRef<any>(null);
   const coordsRef = useRef<Loc | null>(null);
   const builtRef = useRef(false);
+  const rangeRef = useRef(DEFAULT_RANGE);          // live orbit distance (read by the tick)
+  const [range, setRange] = useState(DEFAULT_RANGE);
   const [cfg, setCfg] = useState<FlyoverConfig | null>(null);
   const [wx, setWx] = useState<FlyoverWeather | null>(null);
   const [hudAddress, setHudAddress] = useState<string>("Flyover");
@@ -52,7 +55,7 @@ export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }
     const center = Cesium.Cartesian3.fromDegrees(lng, lat, 0);
     (viewer as any)._orbitCenter = center;
     viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(lng, lat, ORBIT_RANGE),
+      destination: Cesium.Cartesian3.fromDegrees(lng, lat, rangeRef.current),
       orientation: { heading: 0, pitch: Cesium.Math.toRadians(ORBIT_PITCH), roll: 0 },
       duration: 1.5,
     });
@@ -64,8 +67,14 @@ export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }
       if (!center) return;
       (viewer as any)._heading = (((viewer as any)._heading || 0) + ORBIT_RATE);
       viewer.camera.lookAt(center, new Cesium.HeadingPitchRange(
-        (viewer as any)._heading, Cesium.Math.toRadians(ORBIT_PITCH), ORBIT_RANGE));
+        (viewer as any)._heading, Cesium.Math.toRadians(ORBIT_PITCH), rangeRef.current));
     });
+  }
+
+  // Live distance change — the orbit tick reads rangeRef every frame.
+  function changeRange(v: number) {
+    rangeRef.current = v;
+    setRange(v);
   }
 
   // Move the view to a location and refresh its label + weather.
@@ -209,15 +218,31 @@ export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }
           <button className="text-[11px] text-jarvis-accent" onClick={useMyLocation}>📍 my location</button>
           <button className="text-[11px] text-jarvis-accent" onClick={() => setShowGear(s => !s)}>change</button>
         </div>
+        {/* live orbit distance */}
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-[10px] tracking-wider text-jarvis-muted">DIST</span>
+          <input type="range" min={MIN_RANGE} max={MAX_RANGE} step={10} value={range}
+            onChange={e => changeRange(Number(e.target.value))} className="w-28 accent-jarvis-accent" />
+          <span className="text-[10px] text-jarvis-dim numeric w-12 text-right">{range} m</span>
+        </div>
       </div>
       {status && <div className="absolute bottom-6 left-1/2 -translate-x-1/2 panel px-4 py-2 text-sm text-jarvis-dim">{status}</div>}
       <div className="absolute bottom-5 left-6 text-[11px] text-jarvis-muted tracking-wider">ESC TO EXIT · SPACE FOR INTRO</div>
       {showGear && (
-        <div className="absolute top-4 left-4 mt-28 panel px-4 py-3">
+        <div className="absolute top-4 left-4 mt-36 panel px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] tracking-wider text-jarvis-muted">SET LOCATION</span>
+            <button className="text-jarvis-muted hover:text-jarvis-text text-sm leading-none"
+              onClick={() => { setShowGear(false); setStatus(""); }} aria-label="Close">✕</button>
+          </div>
           <input className="input w-64" placeholder="Enter an address or city"
             value={addr} onChange={e => setAddr(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && saveAddress()} autoFocus />
-          <button className="btn mt-2" onClick={saveAddress}>Go</button>
+            onKeyDown={e => { if (e.key === "Enter") saveAddress(); if (e.key === "Escape") { e.stopPropagation(); setShowGear(false); } }}
+            autoFocus />
+          <div className="flex items-center gap-2 mt-2">
+            <button className="btn" onClick={saveAddress}>Go</button>
+            <button className="btn-ghost" onClick={() => { setShowGear(false); setStatus(""); }}>Cancel</button>
+          </div>
         </div>
       )}
     </div>
