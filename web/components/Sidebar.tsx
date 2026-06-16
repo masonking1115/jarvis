@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { JarvisLogo } from "./JarvisLogo";
+import { useFlyover } from "./flyover/FlyoverProvider";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard" },
@@ -20,6 +21,7 @@ const NAV = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { toggle } = useFlyover();
   return (
     <aside className="w-56 shrink-0 border-r border-jarvis-border bg-[#040813]/70 backdrop-blur min-h-screen flex flex-col">
       {/* Top: brand mark → back to landing */}
@@ -51,6 +53,12 @@ export function Sidebar() {
             </Link>
           );
         })}
+        {/* Flyover is an overlay, not a route — toggled (also bound to Esc). */}
+        <button onClick={toggle}
+          className="w-full relative flex items-center gap-3 pl-5 pr-4 py-2 text-[20px] font-ui tracking-wider text-jarvis-dim hover:text-jarvis-text text-left">
+          <span className="dot bg-jarvis-mute2" style={{ width: 9, height: 9 }} />
+          <span>Flyover</span>
+        </button>
       </nav>
 
       {/* Footer: JARVIS Online emblem → back to landing */}
