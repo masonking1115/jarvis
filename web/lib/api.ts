@@ -258,6 +258,17 @@ export type FlyoverWeather = {
   sunset?: number | null;    // unix (UTC)
 };
 
+// ---- Agent (action layer) ----
+export type AgentPlan =
+  | { kind: "reply"; text: string }
+  | { kind: "action"; tool: string; args: Record<string, any>; ack: string };
+export const agent = {
+  plan: (messages: { role: string; content: string }[]) =>
+    api.post<AgentPlan>("/api/agent/plan", { messages }),
+  run: (tool: string, args: Record<string, any>) =>
+    api.post<{ text: string }>("/api/agent/run", { tool, args }),
+};
+
 // ---- Voice ----
 export type VoiceConfig = { available: boolean; voice: string; reason?: string };
 export const voice = {

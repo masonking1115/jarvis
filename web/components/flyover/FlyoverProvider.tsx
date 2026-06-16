@@ -30,6 +30,14 @@ export function FlyoverProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Let the voice agent open the flyover (VoiceProvider wraps this provider, so
+  // it can't use the hook directly — a window event bridges them).
+  useEffect(() => {
+    const open = () => setOpen(true);
+    window.addEventListener("jarvis:flyover", open);
+    return () => window.removeEventListener("jarvis:flyover", open);
+  }, []);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return;

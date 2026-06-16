@@ -1,7 +1,11 @@
 "use client";
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
-import { api, voice as voiceApi } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { agent, voice as voiceApi } from "@/lib/api";
 import { createRecognizer, extractCommand, speechSupported, Recognizer } from "@/lib/voice";
+
+const ROUTES = ["dashboard", "finance", "spending", "email", "fitness", "workouts",
+  "projects", "trading", "agents", "notes", "settings", "goals", "schedule", "tax"];
 
 type State = "disabled" | "idle" | "capturing" | "thinking" | "speaking";
 type Msg = { role: "user" | "assistant"; content: string };
@@ -16,6 +20,7 @@ const Ctx = createContext<{
 export const useVoice = () => useContext(Ctx);
 
 export function VoiceProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   // Computed after mount so server and first client render match (no hydration mismatch).
   const [supported, setSupported] = useState(false);
   const [enabled, setEnabledState] = useState(false);
@@ -100,43 +105,78 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     else { set("disabled"); recRef.current?.stop(); stopAudio(); stopMeter(); clearIdle(); }
   }
 
+  function pushMsg(role: "user" | "assistant", content: string) {
+    msgsRef.current = [...msgsRef.current, { role, content }].slice(-8);
+  }
+
+  // Execute a browser-side action; returns true if handled here.
+  function runFrontend(tool: string, args: any): boolean {
+    if (tool === "navigate" && ROUTES.includes(args?.target)) { router.push("/" + args.target); return true; }
+    if (tool === "open_flyover") { window.dispatchEvent(new CustomEvent("jarvis:flyover")); return true; }
+    return false;
+  }
+
   async function handle(text: string) {
     if (!text) { set("idle"); return; }
     clearIdle();
     setLastHeard(text);
     set("thinking");
-    msgsRef.current = [...msgsRef.current, { role: "user" as const, content: text }].slice(-8);
-    let reply = "";
-    try {
-      const r = await api.post<{ reply: string }>("/api/chat", { messages: msgsRef.current, voice: true });
-      reply = r.reply;
-    } catch { reply = "Sorry, I couldn't reach the server."; }
-    msgsRef.current = [...msgsRef.current, { role: "assistant" as const, content: reply }].slice(-8);
+    pushMsg("user", text);
+
+    let plan: any;
+    try { plan = await agent.plan(msgsRef.current); }
+    catch { plan = { kind: "reply", text: "Sorry, I couldn't reach the server." }; }
+
+    if (plan?.kind === "action") {
+      const ack = plan.ack || "On it, sir.";
+      pushMsg("assistant", ack);
+      setLastSpoken(ack);
+      if (runFrontend(plan.tool, plan.args)) { await speak(ack); return; }      // navigation: ack is the whole reply
+      // backend tool: run it while the ack plays, then speak the result
+      const runP = agent.run(plan.tool, plan.args).then(r => r.text).catch(() => "I ran into a problem, sir.");
+      await speak(ack, { final: false });
+      const result = await runP;
+      setLastSpoken(result);
+      await speak(result);
+      return;
+    }
+
+    const reply = plan?.text || "…";
+    pushMsg("assistant", reply);
     setLastSpoken(reply);
     await speak(reply);
   }
 
-  async function speak(text: string) {
-    set("speaking");
-    const url = await voiceApi.tts(text).catch(() => null);
-    if (!url) { set("idle"); return; }                 // no Azure key → caption only
-    const a = new Audio(url); audioRef.current = a;
-    // Route playback through the analyser so the orb reacts to JARVIS's voice.
-    try {
-      const ctx = ctxRef.current;
-      if (ctx) {
-        const src = ctx.createMediaElementSource(a);
-        const an = ctx.createAnalyser(); an.fftSize = 512; an.smoothingTimeConstant = 0.8;
-        src.connect(an); src.connect(ctx.destination);   // analyse + play
-        speakAnalyserRef.current = an;
-      }
-    } catch { /* analysis optional */ }
-    // After speaking, stay in conversation mode (listen for a follow-up, no wake
-    // word) until IDLE_MS of silence returns us to idle.
-    const done = () => { speakAnalyserRef.current = null; stopAudio(); if (enabledRef.current) beginCapture(); else set("idle"); };
-    a.onended = done;
-    a.onerror = done;
-    a.play().catch(done);
+  // Speak text via Azure TTS. Resolves when playback ends. Only the FINAL
+  // utterance of a turn re-enters conversation mode (so an ack doesn't).
+  function speak(text: string, opts?: { final?: boolean }): Promise<void> {
+    const final = opts?.final !== false;
+    return new Promise<void>((resolve) => {
+      (async () => {
+        set("speaking");
+        const url = await voiceApi.tts(text).catch(() => null);
+        const finish = () => {
+          speakAnalyserRef.current = null; stopAudio();
+          if (final) { if (enabledRef.current) beginCapture(); else set("idle"); }
+          resolve();
+        };
+        if (!url) { finish(); return; }                 // no Azure key → caption only
+        const a = new Audio(url); audioRef.current = a;
+        try {
+          const ctx = ctxRef.current;
+          if (ctx) {
+            const src = ctx.createMediaElementSource(a);
+            const an = ctx.createAnalyser(); an.fftSize = 512; an.smoothingTimeConstant = 0.8;
+            src.connect(an); src.connect(ctx.destination);   // analyse + play
+            speakAnalyserRef.current = an;
+          }
+        } catch { /* analysis optional */ }
+        const done = () => { a.onended = null; a.onerror = null; finish(); };
+        a.onended = done;
+        a.onerror = done;
+        a.play().catch(done);
+      })();
+    });
   }
 
   function onFinal(text: string) {
