@@ -60,8 +60,8 @@ class Settings(BaseSettings):
     # Default location shown until the user sets one (via the in-app gear). Change
     # these in .env to point the flyover somewhere else out of the box.
     flyover_default_address: str = "2 McCormick Lane, Atherton, CA"
-    flyover_default_lat: float = 37.46612
-    flyover_default_lng: float = -122.19684
+    flyover_default_lat: float = 37.4655585    # Google rooftop geocode (aligned with the 3D tiles)
+    flyover_default_lng: float = -122.1967955
 
     @property
     def cors_list(self) -> list[str]:

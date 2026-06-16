@@ -5,6 +5,7 @@ from backend.core.db import Base
 from backend.core.config import settings as app_settings
 from backend.modules.flyover import service, weather as weather_mod
 from backend.modules.flyover import weather
+from backend.modules.flyover import geocode as geocode_mod
 from backend.modules.flyover.models import get_or_create
 
 
@@ -57,7 +58,7 @@ def test_config_defaults_to_configured_location(monkeypatch):
 
 def test_set_location_overrides_default(monkeypatch):
     monkeypatch.setattr(app_settings, "google_maps_api_key", "MAPS123")
-    monkeypatch.setattr(weather_mod, "geocode",
+    monkeypatch.setattr(geocode_mod, "geocode",
                         lambda a: {"address": "Reno, NV, US", "lat": 39.53, "lng": -119.81})
     db = _session()
     service.set_location(db, "Reno")
@@ -67,7 +68,7 @@ def test_set_location_overrides_default(monkeypatch):
 
 def test_set_location_persists(monkeypatch):
     db = _session()
-    monkeypatch.setattr(weather_mod, "geocode",
+    monkeypatch.setattr(geocode_mod, "geocode",
                         lambda a: {"address": "Atherton, CA, US", "lat": 37.46, "lng": -122.2})
     r = service.set_location(db, "Atherton")
     assert r["ok"] and round(r["lat"], 1) == 37.5
@@ -75,7 +76,7 @@ def test_set_location_persists(monkeypatch):
 
 
 def test_set_location_not_found(monkeypatch):
-    monkeypatch.setattr(weather_mod, "geocode", lambda a: None)
+    monkeypatch.setattr(geocode_mod, "geocode", lambda a: None)
     assert service.set_location(_session(), "zzz")["ok"] is False
 
 

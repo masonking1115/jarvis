@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend.core.config import settings
 from .models import FlyoverSettings, get_or_create
 from . import weather
+from . import geocode as geocode_mod
 
 
 def _effective_location(s) -> tuple[str | None, float | None, float | None]:
@@ -37,12 +38,9 @@ def get_config(db: Session) -> dict:
 
 
 def set_location(db: Session, address: str) -> dict:
-    try:
-        hit = weather.geocode(address)
-    except weather.WeatherNotConfigured as e:
-        return {"ok": False, "reason": str(e)}
+    hit = geocode_mod.geocode(address)
     if not hit:
-        return {"ok": False, "reason": "Address not found"}
+        return {"ok": False, "reason": "Address not found (or no geocoder configured)"}
     s = get_or_create(db)
     s.address, s.lat, s.lng = hit["address"], hit["lat"], hit["lng"]
     s.updated_at = datetime.utcnow()
