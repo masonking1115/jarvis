@@ -98,7 +98,8 @@ class ClaudeCliProvider:
         env = {k: v for k, v in os.environ.items()
                if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
         prompt = ("Search the web and answer for spoken delivery — 2-3 sentences, "
-                  "plain text, no markdown, no lists:\n\n" + (query or ""))
+                  "plain text. No markdown, no lists, no citations, no URLs, no sources section:\n\n"
+                  + (query or ""))
         cmd = [self.path, "-p", prompt, "--allowedTools", "WebSearch", "WebFetch",
                "--output-format", "text", "--model", (model or self.model)]
         proc = subprocess.run(
@@ -107,7 +108,11 @@ class ClaudeCliProvider:
         )
         if proc.returncode != 0:
             raise RuntimeError(f"claude web search failed ({proc.returncode}): {proc.stderr[:200]}")
-        return proc.stdout.strip().replace("�", "-")
+        import re
+        out = proc.stdout.strip().replace("�", "-")
+        out = re.split(r"\n\s*sources?\s*:", out, flags=re.I)[0].strip()  # drop trailing sources block
+        out = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", out)                # [text](url) -> text
+        return out.strip()
 
 
 class StubProvider:
