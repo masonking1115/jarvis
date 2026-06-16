@@ -82,12 +82,12 @@ export function Flyover({ open }: { open: boolean }) {
       setCfg(config);
       if (!config.available) { setStatus(config.reason || "Flyover unavailable"); return; }
 
-      // Pick the starting location: device geolocation first, default as fallback.
-      let loc: Loc | null = await getDevicePosition();
-      let label = "My location";
-      if (loc) {
-        label = (await flyover.reverse(loc.lat, loc.lng).catch(() => null))?.address || "My location";
-      } else if (config.lat != null && config.lng != null) {
+      // Default to the configured address (precise). Device geolocation is
+      // opt-in via the "my location" button — on a laptop it's IP-based and
+      // unreliable (can land in the wrong town).
+      let loc: Loc | null = null;
+      let label = "Flyover";
+      if (config.lat != null && config.lng != null) {
         loc = { lat: config.lat, lng: config.lng };
         label = config.address || "Flyover";
       }
