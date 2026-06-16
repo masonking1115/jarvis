@@ -1,9 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useVoice } from "./voice/VoiceProvider";
 
 export function HeaderBar() {
   const [now, setNow] = useState<Date | null>(null);
+  const { enabled, setEnabled, state, supported } = useVoice();
   useEffect(() => {
     setNow(new Date());
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -26,6 +28,13 @@ export function HeaderBar() {
           <span className="pill text-jarvis-good">
             <span className="dot dot-good" /> OPTIMAL
           </span>
+          {supported && (
+            <button onClick={() => setEnabled(!enabled)} title="Toggle JARVIS voice"
+              className={`pill ${enabled ? "text-jarvis-accent" : "text-jarvis-muted"}`}>
+              <span className={`dot ${enabled ? "dot-info" : "bg-jarvis-mute2"}`} style={{ width: 8, height: 8 }} />
+              🎙 VOICE{enabled && state !== "idle" ? ` · ${state}` : ""}
+            </button>
+          )}
         </div>
 
         {/* Right: clock + date + tagline */}

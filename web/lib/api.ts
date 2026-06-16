@@ -258,6 +258,22 @@ export type FlyoverWeather = {
   sunset?: number | null;    // unix (UTC)
 };
 
+// ---- Voice ----
+export type VoiceConfig = { available: boolean; voice: string; reason?: string };
+export const voice = {
+  config: () => api.get<VoiceConfig>("/api/voice/config"),
+  // returns an object URL for the mp3, or null if TTS is unavailable
+  async tts(text: string): Promise<string | null> {
+    const res = await fetch("/api/voice/tts", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) return null;
+    if ((res.headers.get("content-type") || "").includes("application/json")) return null; // degraded
+    return URL.createObjectURL(await res.blob());
+  },
+};
+
 export const flyover = {
   config:  ()                 => api.get<FlyoverConfig>("/api/flyover/config"),
   weather: (lat?: number, lng?: number) =>
