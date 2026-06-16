@@ -1,0 +1,52 @@
+"""Flyover service: location persistence + weather lookup."""
+from __future__ import annotations
+
+from datetime import datetime
+from sqlalchemy.orm import Session
+
+from backend.core.config import settings
+from .models import FlyoverSettings, get_or_create
+from . import weather
+
+
+def get_config(db: Session) -> dict:
+    if not settings.google_maps_api_key:
+        return {"available": False, "reason": "Set GOOGLE_MAPS_API_KEY in backend/.env"}
+    s = get_or_create(db)
+    return {
+        "available": True,
+        "address": s.address,
+        "lat": s.lat,
+        "lng": s.lng,
+        "units": s.units or settings.flyover_default_units,
+        "google_maps_key": settings.google_maps_api_key,
+        "has_weather": bool(settings.openweather_api_key),
+    }
+
+
+def set_location(db: Session, address: str) -> dict:
+    try:
+        hit = weather.geocode(address)
+    except weather.WeatherNotConfigured as e:
+        return {"ok": False, "reason": str(e)}
+    if not hit:
+        return {"ok": False, "reason": "Address not found"}
+    s = get_or_create(db)
+    s.address, s.lat, s.lng = hit["address"], hit["lat"], hit["lng"]
+    s.updated_at = datetime.utcnow()
+    db.commit(); db.refresh(s)
+    return {"ok": True, "address": s.address, "lat": s.lat, "lng": s.lng}
+
+
+def current_weather(db: Session, lat: float | None = None, lng: float | None = None) -> dict:
+    s = get_or_create(db)
+    la = lat if lat is not None else s.lat
+    ln = lng if lng is not None else s.lng
+    if la is None or ln is None:
+        return {"available": False, "reason": "No location set"}
+    try:
+        return {"available": True, **weather.current(la, ln, s.units or "imperial")}
+    except weather.WeatherNotConfigured as e:
+        return {"available": False, "reason": str(e)}
+    except Exception as e:  # noqa: BLE001
+        return {"available": False, "reason": f"weather error: {e}"}

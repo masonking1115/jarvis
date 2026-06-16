@@ -47,6 +47,7 @@ def init_db() -> None:
     from backend.modules.projects import models as _project_models  # noqa: F401
     from backend.modules.gmail import models as _gmail_models  # noqa: F401
     from backend.modules.tax import models as _tax_models  # noqa: F401
+    from backend.modules.flyover import models as _flyover_models  # noqa: F401
     Base.metadata.create_all(bind=engine)
     _apply_lightweight_migrations()
     # WAL improves reader/writer concurrency. Set once at startup; best-effort

@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     gmail_sync_interval_min: int = 15   # how often the screening loop polls
     gmail_backfill: int = 25            # how many recent inbox msgs to screen per run (cap)
 
+    # Flyover (photoreal address view). Maps key is the ONLY key sent to the
+    # browser (Cesium fetches Google tiles directly); restrict it to localhost
+    # referrers. OpenWeather key stays server-side (geocode + current weather).
+    google_maps_api_key: str = ""
+    openweather_api_key: str = ""
+    flyover_default_units: str = "imperial"   # imperial | metric
+
     @property
     def cors_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
