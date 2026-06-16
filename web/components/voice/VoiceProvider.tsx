@@ -16,7 +16,8 @@ const Ctx = createContext<{
 export const useVoice = () => useContext(Ctx);
 
 export function VoiceProvider({ children }: { children: ReactNode }) {
-  const supported = typeof window !== "undefined" && speechSupported();
+  // Computed after mount so server and first client render match (no hydration mismatch).
+  const [supported, setSupported] = useState(false);
   const [enabled, setEnabledState] = useState(false);
   const [state, setState] = useState<State>("disabled");
   const [lastHeard, setLastHeard] = useState("");
@@ -139,6 +140,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       if (cmd) handle(cmd); else set("capturing");
     }
   }
+
+  // Detect Web Speech support on the client only (avoids hydration mismatch).
+  useEffect(() => { setSupported(speechSupported()); }, []);
 
   // Build recognizer once; auto-restart on end while enabled.
   useEffect(() => {
