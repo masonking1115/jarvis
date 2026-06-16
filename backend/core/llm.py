@@ -7,7 +7,7 @@ from .config import settings
 
 class LLMProvider(Protocol):
     name: str
-    def chat(self, system: str, messages: list[dict]) -> str: ...
+    def chat(self, system: str, messages: list[dict], model: str | None = None) -> str: ...
 
 
 class AnthropicProvider:
@@ -18,9 +18,9 @@ class AnthropicProvider:
         self.client = Anthropic(api_key=settings.anthropic_api_key)
         self.model = settings.anthropic_model
 
-    def chat(self, system: str, messages: list[dict]) -> str:
+    def chat(self, system: str, messages: list[dict], model: str | None = None) -> str:
         resp = self.client.messages.create(
-            model=self.model,
+            model=self.model,   # API model ids differ from CLI aliases; ignore override
             max_tokens=1024,
             system=system,
             messages=messages,
@@ -37,7 +37,7 @@ class OpenAIProvider:
         self.client = OpenAI(api_key=settings.openai_api_key)
         self.model = settings.openai_model
 
-    def chat(self, system: str, messages: list[dict]) -> str:
+    def chat(self, system: str, messages: list[dict], model: str | None = None) -> str:
         resp = self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "system", "content": system}, *messages],
@@ -70,7 +70,7 @@ class ClaudeCliProvider:
                     break
         self.available = bool(self.path)
 
-    def chat(self, system: str, messages: list[dict]) -> str:
+    def chat(self, system: str, messages: list[dict], model: str | None = None) -> str:
         if not self.available:
             raise RuntimeError("claude CLI not found on PATH")
         import os, subprocess, tempfile
@@ -80,7 +80,7 @@ class ClaudeCliProvider:
         env = {k: v for k, v in os.environ.items()
                if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
         cmd = [self.path, "-p", "--system-prompt", system,
-               "--output-format", "text", "--model", self.model]
+               "--output-format", "text", "--model", (model or self.model)]
         proc = subprocess.run(
             cmd, input=user, capture_output=True, text=True,
             encoding="utf-8", errors="replace",  # email content has emoji/unicode
@@ -93,7 +93,7 @@ class ClaudeCliProvider:
 
 class StubProvider:
     name = "stub"
-    def chat(self, system: str, messages: list[dict]) -> str:
+    def chat(self, system: str, messages: list[dict], model: str | None = None) -> str:
         last = messages[-1]["content"] if messages else ""
         return f"[stub LLM — no API key configured] You said: {last}"
 

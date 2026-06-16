@@ -8,8 +8,8 @@ export function VoiceIndicator() {
   if (!enabled) return null;
   const caption =
     state === "speaking" ? lastSpoken :
-    state === "capturing" ? (lastHeard || "Listening…") :
-    state === "thinking" ? "Thinking…" : "";
+    state === "capturing" ? "Listening…" :
+    state === "thinking" ? (lastHeard || "Thinking…") : "";
   if (!caption) return null;
   return (
     <div className="pointer-events-none fixed bottom-[268px] left-1/2 -translate-x-1/2 z-[6] w-[90vw] max-w-md px-4">

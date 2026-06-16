@@ -10,14 +10,16 @@ export type Recognizer = { start: () => void; stop: () => void };
 
 export function createRecognizer(opts: {
   onFinal: (text: string) => void;
+  onActivity?: () => void;   // fires on any (interim or final) result — "user is making sound"
   onError: (err: string) => void;
   onEnd: () => void;
 }): Recognizer | null {
   const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
   if (!Ctor) return null;
   const rec = new Ctor();
-  rec.continuous = true; rec.interimResults = false; rec.lang = "en-US";
+  rec.continuous = true; rec.interimResults = true; rec.lang = "en-US";
   rec.onresult = (e: any) => {
+    opts.onActivity?.();
     for (let i = e.resultIndex; i < e.results.length; i++) {
       if (e.results[i].isFinal) opts.onFinal((e.results[i][0].transcript || "").trim());
     }

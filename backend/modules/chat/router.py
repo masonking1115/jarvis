@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.core.db import get_db
+from backend.core.config import settings
 from backend.core.llm import get_provider
 from backend.modules.tasks.models import Task
 from backend.modules.goals.models import Goal
@@ -94,7 +95,9 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
         system += ("\n\nRespond briefly and conversationally, as spoken dialogue — "
                    "at most 2-3 sentences, no markdown, no lists, no emojis.")
     msgs = [{"role": m.role, "content": m.content} for m in req.messages]
-    reply = provider.chat(system=system, messages=msgs)
+    # Voice replies use a faster model (lower latency); typed chat keeps the default.
+    model = settings.voice_model if req.voice else None
+    reply = provider.chat(system=system, messages=msgs, model=model)
     return ChatResponse(reply=reply, provider=provider.name)
 
 

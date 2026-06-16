@@ -49,7 +49,7 @@ def test_chat_voice_flag_tightens_system(monkeypatch):
 
     class FakeProvider:
         name = "fake"
-        def chat(self, system, messages): seen["system"] = system; return "ok"
+        def chat(self, system, messages, model=None): seen["system"] = system; seen["model"] = model; return "ok"
 
     monkeypatch.setattr(chat_router, "get_provider", lambda p=None: FakeProvider())
 
@@ -63,3 +63,4 @@ def test_chat_voice_flag_tightens_system(monkeypatch):
     req = chat_router.ChatRequest(messages=[chat_router.ChatMessage(role="user", content="hi")], voice=True)
     chat_router.chat(req, db=FakeDB())
     assert "spoken dialogue" in seen["system"]
+    assert seen["model"] == app_settings.voice_model     # voice uses the faster model

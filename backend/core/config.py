@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     # claude_cli: drives the logged-in Claude Code CLI (Max plan) instead of an API key.
     claude_cli_path: str = "claude"
     claude_cli_model: str = "sonnet"   # alias the CLI understands (sonnet | opus | haiku)
+    voice_model: str = "haiku"         # faster model for spoken replies (lower latency)
 
     database_url: str = "sqlite:///./data/jarvis.db"
     cors_origins: str = "http://localhost:3000"

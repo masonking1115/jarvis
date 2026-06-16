@@ -28,7 +28,18 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef<State>("disabled");
   const enabledRef = useRef(false);
   const msgsRef = useRef<Msg[]>([]);
+  const idleTimerRef = useRef<number | null>(null);   // returns to idle after silence
   const set = (s: State) => { stateRef.current = s; setState(s); };
+
+  const IDLE_MS = 10000;   // stay listening this long after a reply, then idle
+  function clearIdle() { if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null; } }
+  function armIdle() {
+    clearIdle();
+    idleTimerRef.current = window.setTimeout(() => {
+      if (stateRef.current === "capturing") set("idle");
+    }, IDLE_MS);
+  }
+  function beginCapture() { set("capturing"); armIdle(); }   // conversation mode (no wake word)
 
   // ---- live audio level meter (drives the orb) ----
   const levelRef = useRef(0);
@@ -86,11 +97,12 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     enabledRef.current = v; setEnabledState(v);
     if (typeof window !== "undefined") localStorage.setItem("jarvisVoice", v ? "1" : "0");
     if (v) { set("idle"); recRef.current?.start(); startMeter(); }
-    else { set("disabled"); recRef.current?.stop(); stopAudio(); stopMeter(); }
+    else { set("disabled"); recRef.current?.stop(); stopAudio(); stopMeter(); clearIdle(); }
   }
 
   async function handle(text: string) {
     if (!text) { set("idle"); return; }
+    clearIdle();
     setLastHeard(text);
     set("thinking");
     msgsRef.current = [...msgsRef.current, { role: "user" as const, content: text }].slice(-8);
@@ -119,27 +131,36 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         speakAnalyserRef.current = an;
       }
     } catch { /* analysis optional */ }
-    const done = () => { speakAnalyserRef.current = null; stopAudio(); set("idle"); };
+    // After speaking, stay in conversation mode (listen for a follow-up, no wake
+    // word) until IDLE_MS of silence returns us to idle.
+    const done = () => { speakAnalyserRef.current = null; stopAudio(); if (enabledRef.current) beginCapture(); else set("idle"); };
     a.onended = done;
     a.onerror = done;
     a.play().catch(done);
   }
 
   function onFinal(text: string) {
-    if (!enabledRef.current) return;
+    if (!enabledRef.current || !text) return;
     const s = stateRef.current;
     if (s === "speaking") {                            // barge-in: wake word stops playback
       const cmd = extractCommand(text);
-      if (cmd !== null) { stopAudio(); if (cmd) handle(cmd); else set("capturing"); }
+      if (cmd !== null) { speakAnalyserRef.current = null; stopAudio(); if (cmd) handle(cmd); else beginCapture(); }
       return;
     }
-    if (s === "capturing") { handle(text); return; }
+    if (s === "capturing") {                           // conversation mode — no wake word needed
+      const c = extractCommand(text);
+      handle(c && c.length ? c : text);
+      return;
+    }
     if (s === "idle") {
       const cmd = extractCommand(text);
       if (cmd === null) return;                        // no wake word — ignore ambient speech
-      if (cmd) handle(cmd); else set("capturing");
+      if (cmd) handle(cmd); else beginCapture();
     }
   }
+
+  // Any speech while capturing resets the silence countdown (so it won't time out mid-thought).
+  function onActivity() { if (stateRef.current === "capturing") armIdle(); }
 
   // Detect Web Speech support on the client only (avoids hydration mismatch).
   useEffect(() => { setSupported(speechSupported()); }, []);
@@ -149,6 +170,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     if (!supported) return;
     recRef.current = createRecognizer({
       onFinal,
+      onActivity,
       onError: (e) => { if (e === "not-allowed" || e === "service-not-allowed") setEnabled(false); },
       onEnd: () => { if (enabledRef.current) setTimeout(() => recRef.current?.start(), 250); },
     });
