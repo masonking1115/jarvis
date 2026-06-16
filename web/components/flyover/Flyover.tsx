@@ -1,13 +1,14 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { loadCesium } from "@/lib/cesium";
 import { flyover, FlyoverConfig, FlyoverWeather } from "@/lib/api";
-import { weatherToEffects } from "@/lib/weatherEffects";
+import { weatherToEffects, nightFactor } from "@/lib/weatherEffects";
 import { applyEffects } from "./effects";
 import { JarvisOrb } from "@/components/JarvisOrb";
 
 const ORBIT_RATE = 0.0006;    // radians/frame — slow cinematic orbit
-const ORBIT_RANGE = 250;      // meters from the point — frames the property
+const ORBIT_RANGE = 200;      // meters from the point — frames the property
 const ORBIT_PITCH = -28;      // degrees below horizontal (oblique aerial)
 
 type Loc = { lat: number; lng: number };
@@ -24,13 +25,15 @@ function getDevicePosition(): Promise<Loc | null> {
   });
 }
 
-export function Flyover({ open }: { open: boolean }) {
+export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }) {
+  const router = useRouter();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<any>(null);
   const coordsRef = useRef<Loc | null>(null);
   const builtRef = useRef(false);
   const [cfg, setCfg] = useState<FlyoverConfig | null>(null);
   const [wx, setWx] = useState<FlyoverWeather | null>(null);
+  const [night, setNight] = useState(0);   // 0 = day, 1 = night (drives the dark tint)
   const [hudAddress, setHudAddress] = useState<string>("Flyover");
   const [status, setStatus] = useState<string>("");
   const [showGear, setShowGear] = useState(false);
@@ -40,9 +43,12 @@ export function Flyover({ open }: { open: boolean }) {
     const c = coordsRef.current;
     const w = await flyover.weather(c?.lat, c?.lng).catch(() => null);
     setWx(w);
+    setNight(nightFactor(w));
     const v = viewerRef.current;
     if (v) applyEffects((window as any).Cesium, v.scene, weatherToEffects(w));
   }
+
+  function goDashboard() { onExit?.(); router.push("/dashboard"); }
 
   function flyToAddress(Cesium: any, viewer: any, lat: number, lng: number) {
     const center = Cesium.Cartesian3.fromDegrees(lng, lat, 0);
@@ -127,6 +133,22 @@ export function Flyover({ open }: { open: boolean }) {
     return () => clearInterval(id);
   }, [open]);
 
+  // From the map: Space takes you back to the intro (ignored while typing an address).
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== " " && e.code !== "Space") return;
+      const el = document.activeElement as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
+      e.preventDefault();
+      onExit?.();
+      router.push("/");
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, router]);
+
   async function useMyLocation() {
     setStatus("");
     const loc = await getDevicePosition();
@@ -149,11 +171,19 @@ export function Flyover({ open }: { open: boolean }) {
       {/* same cyan vignette glow as the intro, behind the map */}
       <div className="pointer-events-none absolute inset-0"
         style={{ background: "radial-gradient(60% 60% at 50% 50%, rgba(74,214,255,0.08), transparent 70%), radial-gradient(40% 40% at 50% 50%, rgba(74,214,255,0.05), transparent 70%)" }} />
-      {/* the map — edges masked so they dissolve into the grid background */}
-      <div ref={containerRef} className="absolute inset-0"
+      {/* the map */}
+      <div ref={containerRef} className="absolute inset-0" />
+      {/* night tint — darkens the (daytime) tiles toward dusk/night based on the sun */}
+      <div className="pointer-events-none absolute inset-0 transition-opacity duration-1000"
+        style={{ background: "radial-gradient(80% 80% at 50% 45%, rgba(6,12,32,0.85), rgba(2,5,16,0.95))", opacity: night * 0.72 }} />
+      {/* dark edge vignette — fades the map into the background colour */}
+      <div className="pointer-events-none absolute inset-0"
+        style={{ background: "radial-gradient(ellipse 78% 80% at 50% 50%, transparent 52%, #04080f 90%)" }} />
+      {/* grid lines fading IN toward the edges, so the map dissolves into the grid */}
+      <div className="pointer-events-none absolute inset-0 grid-bg"
         style={{
-          WebkitMaskImage: "radial-gradient(ellipse 96% 96% at 50% 50%, #000 86%, transparent 100%)",
-          maskImage: "radial-gradient(ellipse 96% 96% at 50% 50%, #000 86%, transparent 100%)",
+          WebkitMaskImage: "radial-gradient(ellipse 85% 85% at 50% 50%, transparent 55%, #000 92%)",
+          maskImage: "radial-gradient(ellipse 85% 85% at 50% 50%, transparent 55%, #000 92%)",
         }} />
       {/* Dashboard-style chrome: cyan panel border + corner cuts framing the view */}
       <div className="pointer-events-none absolute inset-2 rounded-[14px] corner-cuts"
@@ -161,9 +191,9 @@ export function Flyover({ open }: { open: boolean }) {
           border: "1px solid rgba(74, 214, 255, 0.35)",
           boxShadow: "inset 0 0 60px rgba(74, 214, 255, 0.10), 0 0 30px rgba(74, 214, 255, 0.15)",
         }} />
-      {/* JARVIS hero orb (rings + breathing core + wordmark), bottom-right */}
-      <div className="pointer-events-none absolute bottom-2 right-2" aria-hidden>
-        <JarvisOrb className="w-[300px] h-[300px]" />
+      {/* JARVIS hero orb (rings + breathing core + wordmark), bottom-right — its core clicks through to the dashboard */}
+      <div className="pointer-events-none absolute bottom-2 right-2">
+        <JarvisOrb className="w-[300px] h-[300px]" onOrbClick={goDashboard} />
       </div>
       {/* HUD */}
       <div className="absolute top-4 left-4 panel !bg-jarvis-panel/70 backdrop-blur px-4 py-3 max-w-xs">
@@ -180,7 +210,7 @@ export function Flyover({ open }: { open: boolean }) {
         </div>
       </div>
       {status && <div className="absolute bottom-6 left-1/2 -translate-x-1/2 panel px-4 py-2 text-sm text-jarvis-dim">{status}</div>}
-      <div className="absolute bottom-5 left-6 text-[11px] text-jarvis-muted tracking-wider">ESC TO EXIT</div>
+      <div className="absolute bottom-5 left-6 text-[11px] text-jarvis-muted tracking-wider">ESC TO EXIT · SPACE FOR INTRO</div>
       {showGear && (
         <div className="absolute top-4 left-4 mt-28 panel px-4 py-3">
           <input className="input w-64" placeholder="Enter an address or city"

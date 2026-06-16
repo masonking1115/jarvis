@@ -51,6 +51,9 @@ def normalize_current(raw: dict) -> dict:
         "wind_mps": raw.get("wind", {}).get("speed", 0.0),
         "raw_id": w.get("id"),
         "is_day": is_day,
+        "dt": dt,                 # current unix time at the location (UTC)
+        "sunrise": sunrise,       # unix (UTC)
+        "sunset": sunset,         # unix (UTC)
     }
 
 

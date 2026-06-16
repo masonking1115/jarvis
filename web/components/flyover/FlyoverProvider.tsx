@@ -45,7 +45,7 @@ export function FlyoverProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={{ open, toggle: () => setOpen(o => !o), setOpen }}>
       {children}
-      <Flyover open={open} />
+      <Flyover open={open} onExit={() => setOpen(false)} />
     </Ctx.Provider>
   );
 }

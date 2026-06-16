@@ -253,6 +253,9 @@ export type FlyoverWeather = {
   wind_mps?: number;
   raw_id?: number | null;
   is_day?: boolean;
+  dt?: number | null;        // current unix time at the location (UTC)
+  sunrise?: number | null;   // unix (UTC)
+  sunset?: number | null;    // unix (UTC)
 };
 
 export const flyover = {

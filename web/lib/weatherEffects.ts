@@ -39,3 +39,18 @@ export function weatherToEffects(w: FlyoverWeather | null): EffectProfile {
       return CLEAR;
   }
 }
+
+// 0 = full daylight, 1 = full night, with a smooth ~40-min twilight ramp around
+// sunrise/sunset. Falls back to the is_day boolean if timestamps are missing.
+export function nightFactor(w: FlyoverWeather | null): number {
+  if (!w || !w.available) return 0;
+  const { dt, sunrise, sunset } = w;
+  if (dt == null || sunrise == null || sunset == null) return w.is_day === false ? 1 : 0;
+  const ramp = 40 * 60; // seconds of twilight on each side
+  const lerp = (t: number, a: number, b: number) => Math.min(1, Math.max(0, (t - a) / (b - a)));
+  if (dt < sunrise - ramp) return 1;                 // deep night before dawn
+  if (dt < sunrise + ramp) return 1 - lerp(dt, sunrise - ramp, sunrise + ramp); // dawn 1->0
+  if (dt < sunset - ramp) return 0;                  // daylight
+  if (dt < sunset + ramp) return lerp(dt, sunset - ramp, sunset + ramp);        // dusk 0->1
+  return 1;                                          // night after dusk
+}
