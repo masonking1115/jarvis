@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     claude_cli_path: str = "claude"
     claude_cli_model: str = "sonnet"   # alias the CLI understands (sonnet | opus | haiku)
     voice_model: str = "haiku"         # faster model for spoken replies (lower latency)
+    jarvis_profile_path: str = ""      # override path to jarvis_profile.md (default: backend/jarvis_profile.md)
 
     database_url: str = "sqlite:///./data/jarvis.db"
     cors_origins: str = "http://localhost:3000"

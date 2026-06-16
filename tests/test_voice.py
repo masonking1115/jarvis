@@ -64,3 +64,14 @@ def test_chat_voice_flag_tightens_system(monkeypatch):
     chat_router.chat(req, db=FakeDB())
     assert "spoken dialogue" in seen["system"]
     assert seen["model"] == app_settings.voice_model     # voice uses the faster model
+
+
+def test_load_persona_uses_file(monkeypatch, tmp_path):
+    p = tmp_path / "prof.md"; p.write_text("CUSTOM PERSONA RULES", encoding="utf-8")
+    monkeypatch.setattr(app_settings, "jarvis_profile_path", str(p))
+    assert chat_router.load_persona() == "CUSTOM PERSONA RULES"
+
+
+def test_load_persona_fallback(monkeypatch, tmp_path):
+    monkeypatch.setattr(app_settings, "jarvis_profile_path", str(tmp_path / "missing.md"))
+    assert chat_router.load_persona() == chat_router.DEFAULT_PERSONA

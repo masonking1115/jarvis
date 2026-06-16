@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -30,12 +31,30 @@ class ChatResponse(BaseModel):
     provider: str
 
 
-SYSTEM_PROMPT = (
+# Fallback persona used only if jarvis_profile.md is missing/empty.
+DEFAULT_PERSONA = (
     "You are Jarvis, the user's personal life-optimization assistant. "
     "Be concise, direct, and proactive. Use the user's tasks and goals (provided below) "
     "as context. When the user asks for plans or recommendations, ground them in that data. "
     "If you don't have relevant data, say so plainly."
 )
+
+
+def _profile_path() -> Path:
+    if settings.jarvis_profile_path:
+        return Path(settings.jarvis_profile_path)
+    # backend/jarvis_profile.md (router.py is backend/modules/chat/router.py)
+    return Path(__file__).resolve().parent.parent.parent / "jarvis_profile.md"
+
+
+def load_persona() -> str:
+    """The editable JARVIS profile (guardrails/expectations/skills), read fresh
+    each call so edits apply without a restart. Falls back to DEFAULT_PERSONA."""
+    try:
+        txt = _profile_path().read_text(encoding="utf-8").strip()
+        return txt or DEFAULT_PERSONA
+    except (FileNotFoundError, OSError):
+        return DEFAULT_PERSONA
 
 
 def _build_context(db: Session) -> str:
@@ -90,7 +109,7 @@ def _build_context(db: Session) -> str:
 def chat(req: ChatRequest, db: Session = Depends(get_db)):
     provider = get_provider(req.provider)
     context = _build_context(db)
-    system = f"{SYSTEM_PROMPT}\n\n{context}"
+    system = f"{load_persona()}\n\n{context}"
     if req.voice:
         system += ("\n\nRespond briefly and conversationally, as spoken dialogue — "
                    "at most 2-3 sentences, no markdown, no lists, no emojis.")
@@ -106,7 +125,7 @@ def daily_briefing(db: Session = Depends(get_db)):
     """One-shot morning briefing — pulls today's data, asks the LLM to summarize."""
     provider = get_provider()
     context = _build_context(db)
-    system = f"{SYSTEM_PROMPT}\n\n{context}"
+    system = f"{load_persona()}\n\n{context}"
     user_msg = (
         "Give me a concise morning briefing: top 3 priorities for today based on my tasks and goals, "
         "any deadlines I should know about, and one focused recommendation. Keep it under 200 words."
