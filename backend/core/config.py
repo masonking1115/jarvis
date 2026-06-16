@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     flyover_default_lat: float = 37.4655585    # Google rooftop geocode (aligned with the 3D tiles)
     flyover_default_lng: float = -122.1967955
 
+    # Voice (Azure Neural TTS). Key stays server-side (proxied via /api/voice/tts).
+    azure_speech_key: str = ""
+    azure_speech_region: str = "eastus"
+    jarvis_voice: str = "en-GB-RyanNeural"
+
     @property
     def cors_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

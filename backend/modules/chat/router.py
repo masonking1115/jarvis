@@ -21,6 +21,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     provider: str | None = None  # optional override: "anthropic" | "openai"
+    voice: bool = False          # tighten replies for spoken output
 
 
 class ChatResponse(BaseModel):
@@ -89,6 +90,9 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
     provider = get_provider(req.provider)
     context = _build_context(db)
     system = f"{SYSTEM_PROMPT}\n\n{context}"
+    if req.voice:
+        system += ("\n\nRespond briefly and conversationally, as spoken dialogue — "
+                   "at most 2-3 sentences, no markdown, no lists, no emojis.")
     msgs = [{"role": m.role, "content": m.content} for m in req.messages]
     reply = provider.chat(system=system, messages=msgs)
     return ChatResponse(reply=reply, provider=provider.name)
