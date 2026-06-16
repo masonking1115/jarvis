@@ -171,15 +171,11 @@ export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }
         style={{ background: "radial-gradient(60% 60% at 50% 50%, rgba(74,214,255,0.08), transparent 70%), radial-gradient(40% 40% at 50% 50%, rgba(74,214,255,0.05), transparent 70%)" }} />
       {/* the map */}
       <div ref={containerRef} className="absolute inset-0" />
-      {/* dark edge vignette — harsh taper: map holds full, then drops to bg near the edge */}
+      {/* harsh edge taper — uniform inset frame fades the map into the dark grid
+          backdrop on ALL four sides (a radial gradient only darkens corners,
+          which is why the earlier version showed "no taper"). */}
       <div className="pointer-events-none absolute inset-0"
-        style={{ background: "radial-gradient(ellipse 96% 96% at 50% 50%, transparent 88%, #04080f 99%)" }} />
-      {/* grid lines snapping IN at the very edges, so the map dissolves into the grid */}
-      <div className="pointer-events-none absolute inset-0 grid-bg"
-        style={{
-          WebkitMaskImage: "radial-gradient(ellipse 97% 97% at 50% 50%, transparent 90%, #000 99%)",
-          maskImage: "radial-gradient(ellipse 97% 97% at 50% 50%, transparent 90%, #000 99%)",
-        }} />
+        style={{ boxShadow: "inset 0 0 12px 30px #04080f" }} />
       {/* Dashboard-style chrome: cyan panel border + corner cuts framing the view */}
       <div className="pointer-events-none absolute inset-2 rounded-[14px] corner-cuts"
         style={{
