@@ -47,6 +47,24 @@ def test_config_exposes_maps_key_not_weather_key(monkeypatch):
     assert "WEATHER_SECRET" not in str(cfg)   # weather key never leaks
 
 
+def test_config_defaults_to_configured_location(monkeypatch):
+    monkeypatch.setattr(app_settings, "google_maps_api_key", "MAPS123")
+    cfg = service.get_config(_session())   # no location set -> default (Atherton)
+    assert cfg["address"] == app_settings.flyover_default_address
+    assert cfg["lat"] == app_settings.flyover_default_lat
+    assert cfg["lng"] == app_settings.flyover_default_lng
+
+
+def test_set_location_overrides_default(monkeypatch):
+    monkeypatch.setattr(app_settings, "google_maps_api_key", "MAPS123")
+    monkeypatch.setattr(weather_mod, "geocode",
+                        lambda a: {"address": "Reno, NV, US", "lat": 39.53, "lng": -119.81})
+    db = _session()
+    service.set_location(db, "Reno")
+    cfg = service.get_config(db)
+    assert cfg["address"] == "Reno, NV, US" and round(cfg["lat"], 1) == 39.5
+
+
 def test_set_location_persists(monkeypatch):
     db = _session()
     monkeypatch.setattr(weather_mod, "geocode",
@@ -61,5 +79,7 @@ def test_set_location_not_found(monkeypatch):
     assert service.set_location(_session(), "zzz")["ok"] is False
 
 
-def test_current_weather_no_location():
+def test_current_weather_without_key(monkeypatch):
+    # A default location exists now, so unavailability comes from the missing key.
+    monkeypatch.setattr(app_settings, "openweather_api_key", "")
     assert service.current_weather(_session())["available"] is False

@@ -9,15 +9,25 @@ from .models import FlyoverSettings, get_or_create
 from . import weather
 
 
+def _effective_location(s) -> tuple[str | None, float | None, float | None]:
+    """User-set location if present, else the configured default (Atherton)."""
+    if s.lat is not None and s.lng is not None:
+        return s.address, s.lat, s.lng
+    return (settings.flyover_default_address,
+            settings.flyover_default_lat,
+            settings.flyover_default_lng)
+
+
 def get_config(db: Session) -> dict:
     if not settings.google_maps_api_key:
         return {"available": False, "reason": "Set GOOGLE_MAPS_API_KEY in backend/.env"}
     s = get_or_create(db)
+    address, lat, lng = _effective_location(s)
     return {
         "available": True,
-        "address": s.address,
-        "lat": s.lat,
-        "lng": s.lng,
+        "address": address,
+        "lat": lat,
+        "lng": lng,
         "units": s.units or settings.flyover_default_units,
         "google_maps_key": settings.google_maps_api_key,
         "has_weather": bool(settings.openweather_api_key),
@@ -40,8 +50,9 @@ def set_location(db: Session, address: str) -> dict:
 
 def current_weather(db: Session, lat: float | None = None, lng: float | None = None) -> dict:
     s = get_or_create(db)
-    la = lat if lat is not None else s.lat
-    ln = lng if lng is not None else s.lng
+    _, def_lat, def_lng = _effective_location(s)
+    la = lat if lat is not None else def_lat
+    ln = lng if lng is not None else def_lng
     if la is None or ln is None:
         return {"available": False, "reason": "No location set"}
     try:
