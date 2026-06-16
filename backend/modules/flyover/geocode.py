@@ -47,8 +47,11 @@ def reverse_geocode(lat: float, lng: float) -> str | None:
 
 
 def geocode(address: str) -> dict | None:
-    """Google first (rooftop), then OpenWeather (city-level). Returns None if no
-    geocoder can resolve the address."""
+    """Google first (rooftop), then OpenWeather (city-level). Returns None if the
+    address is blank or no geocoder can resolve it. Never raises (and never lets
+    a provider error — which carries the API key in its URL — escape)."""
+    if not address or not address.strip():
+        return None
     try:
         g = google_geocode(address)
         if g:
@@ -57,5 +60,5 @@ def geocode(address: str) -> dict | None:
         pass
     try:
         return weather.geocode(address)
-    except weather.WeatherNotConfigured:
+    except Exception:  # noqa: BLE001 — bad address / provider error; keep the key out of logs
         return None

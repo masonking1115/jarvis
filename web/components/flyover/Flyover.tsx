@@ -156,6 +156,7 @@ export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }
   }
 
   async function saveAddress() {
+    if (!addr.trim()) { setStatus("Enter an address"); return; }
     const r = await flyover.setLocation(addr);
     if (!r.ok || r.lat == null || r.lng == null) { setStatus(r.reason || "Address not found"); return; }
     setShowGear(false); setStatus("");

@@ -38,6 +38,8 @@ def get_config(db: Session) -> dict:
 
 
 def set_location(db: Session, address: str) -> dict:
+    if not address or not address.strip():
+        return {"ok": False, "reason": "Enter an address"}
     hit = geocode_mod.geocode(address)
     if not hit:
         return {"ok": False, "reason": "Address not found (or no geocoder configured)"}
