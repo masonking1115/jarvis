@@ -30,6 +30,22 @@ def google_geocode(address: str) -> dict | None:
     return {"address": res["formatted_address"], "lat": float(loc["lat"]), "lng": float(loc["lng"])}
 
 
+def reverse_geocode(lat: float, lng: float) -> str | None:
+    """lat/lng -> a human address label via Google, or None. Self-contained
+    error handling so the key never escapes in an exception string."""
+    if not settings.google_maps_api_key:
+        return None
+    try:
+        r = httpx.get(_GOOGLE, params={"latlng": f"{lat},{lng}", "key": settings.google_maps_api_key}, timeout=15)
+        r.raise_for_status()
+        d = r.json()
+    except Exception:  # noqa: BLE001
+        return None
+    if d.get("status") != "OK" or not d.get("results"):
+        return None
+    return d["results"][0]["formatted_address"]
+
+
 def geocode(address: str) -> dict | None:
     """Google first (rooftop), then OpenWeather (city-level). Returns None if no
     geocoder can resolve the address."""

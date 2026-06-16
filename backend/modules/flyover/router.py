@@ -19,6 +19,11 @@ def weather_now(lat: float | None = None, lng: float | None = None, db: Session 
     return service.current_weather(db, lat, lng)
 
 
+@router.get("/reverse")
+def reverse(lat: float, lng: float):
+    return service.reverse_geocode(lat, lng)
+
+
 class LocationIn(BaseModel):
     address: str
 

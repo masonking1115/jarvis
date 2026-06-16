@@ -48,6 +48,11 @@ def set_location(db: Session, address: str) -> dict:
     return {"ok": True, "address": s.address, "lat": s.lat, "lng": s.lng}
 
 
+def reverse_geocode(lat: float, lng: float) -> dict:
+    """lat/lng -> {address} label (Google), or {address: None}."""
+    return {"address": geocode_mod.reverse_geocode(lat, lng)}
+
+
 def current_weather(db: Session, lat: float | None = None, lng: float | None = None) -> dict:
     s = get_or_create(db)
     _, def_lat, def_lng = _effective_location(s)

@@ -257,7 +257,11 @@ export type FlyoverWeather = {
 
 export const flyover = {
   config:  ()                 => api.get<FlyoverConfig>("/api/flyover/config"),
-  weather: ()                 => api.get<FlyoverWeather>("/api/flyover/weather"),
+  weather: (lat?: number, lng?: number) =>
+    api.get<FlyoverWeather>(
+      lat != null && lng != null ? `/api/flyover/weather?lat=${lat}&lng=${lng}` : "/api/flyover/weather"),
+  reverse: (lat: number, lng: number) =>
+    api.get<{ address: string | null }>(`/api/flyover/reverse?lat=${lat}&lng=${lng}`),
   setLocation: (address: string) =>
     api.post<{ ok: boolean; reason?: string; address?: string; lat?: number; lng?: number }>(
       "/api/flyover/location", { address }),
