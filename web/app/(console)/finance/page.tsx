@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   api, Txn, IncomeSource, Asset, Liability, FinanceOverview,
-  RobinhoodStatus, RobinhoodSyncResult, EmailCardStatement, StatementReminder, CardSpending,
+  RobinhoodStatus, RobinhoodSyncResult, EmailCardStatement, StatementReminder, CardSpending, SpendingSummary,
 } from "@/lib/api";
 import { Panel } from "@/components/Panel";
 import { PieChart } from "@/components/PieChart";
@@ -44,6 +44,7 @@ export default function FinancePage() {
   const [statements, setStatements] = useState<EmailCardStatement[]>([]);
   const [reminders, setReminders] = useState<StatementReminder[]>([]);
   const [cardSpending, setCardSpending] = useState<CardSpending[]>([]);
+  const [spending, setSpending] = useState<SpendingSummary | null>(null);
 
   async function refresh() {
     const [o, i, a, l, t] = await Promise.all([
@@ -61,6 +62,8 @@ export default function FinancePage() {
     catch { setReminders([]); }
     try { setCardSpending(await api.get<CardSpending[]>("/api/gmail/card-spending")); }
     catch { setCardSpending([]); }
+    try { setSpending(await api.get<SpendingSummary>("/api/gmail/spending?days=365")); }
+    catch { setSpending(null); }
   }
   useEffect(() => { refresh().catch(console.error); }, []);
 
@@ -78,10 +81,8 @@ export default function FinancePage() {
       </div>
 
       <AssetsBlock items={assets} onChange={refresh} />
-      <AllocationBlock items={assets} />
+      <AllocationBlock items={assets} spending={spending} />
       <CardsGrid items={cardSpending} reminders={reminders} onChange={refresh} />
-      <LiabilitiesBlock items={liabilities} onChange={refresh} />
-      <CardStatementsBlock items={statements} onChange={refresh} />
       <TransactionsBlock items={txns} onChange={refresh} />
     </div>
   );
@@ -390,7 +391,7 @@ function AssetsBlock({ items, onChange }: { items: Asset[]; onChange: () => void
 
 /* ---------------- Allocation (pie charts) ---------------- */
 
-function AllocationBlock({ items }: { items: Asset[] }) {
+function AllocationBlock({ items, spending }: { items: Asset[]; spending: SpendingSummary | null }) {
   const stocks = items.filter(a => a.category === "stocks" && (a.value ?? 0) > 0);
   const crypto = items.filter(a => a.category === "crypto" && (a.value ?? 0) > 0);
 
@@ -421,9 +422,23 @@ function AllocationBlock({ items }: { items: Asset[] }) {
   const industryTotal = industryData.reduce((s, d) => s + d.value, 0);
   const stocksOnlyTotal = stockData.reduce((s, d) => s + d.value, 0);
 
+  // Chart 3: all expenditures by category (from parsed spending).
+  const expenditureData = (spending?.by_category || [])
+    .filter(c => c.amount > 0)
+    .sort((a, b) => b.amount - a.amount)
+    .map((c, i) => ({ label: c.category, value: c.amount, color: PIE_PALETTE[i % PIE_PALETTE.length] }));
+  const expenditureTotal = expenditureData.reduce((s, d) => s + d.value, 0);
+  // Monthly indication: average across months from April onward (earlier data is partial).
+  const AVG_FROM = "2026-04";
+  const avgMonths = (spending?.monthly || []).filter(m => m.month >= AVG_FROM);
+  const perMonth = avgMonths.length
+    ? avgMonths.reduce((s, m) => s + m.amount, 0) / avgMonths.length
+    : 0;
+  const thisMonth = spending?.this_month ?? 0;
+
   return (
     <Panel title="Allocation">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div>
           <div className="text-[11px] tracking-wider text-jarvis-muted mb-2">BY INDUSTRY + CRYPTO</div>
           <PieChart data={industryData} center={$(industryTotal)} />
@@ -431,6 +446,22 @@ function AllocationBlock({ items }: { items: Asset[] }) {
         <div>
           <div className="text-[11px] tracking-wider text-jarvis-muted mb-2">INDIVIDUAL STOCKS</div>
           <PieChart data={stockData} center={$(stocksOnlyTotal)} />
+        </div>
+        <div>
+          <div className="flex items-baseline justify-between mb-2">
+            <span className="text-[11px] tracking-wider text-jarvis-muted">ALL EXPENDITURES</span>
+            {expenditureData.length > 0 && (
+              <span className="text-[15px] font-bold numeric text-jarvis-text">{$(perMonth)}<span className="text-[10px] text-jarvis-muted font-normal">/mo</span></span>
+            )}
+          </div>
+          {expenditureData.length ? (
+            <>
+              <PieChart data={expenditureData} center={`${$(perMonth)}/mo`} />
+              <div className="text-[10px] text-jarvis-muted mt-2">
+                avg over {avgMonths.length} mo (from Apr) · this month {$(thisMonth)} · {$(expenditureTotal)} total
+              </div>
+            </>
+          ) : <div className="text-xs text-jarvis-muted">No spending parsed yet — import statements or connect Gmail.</div>}
         </div>
       </div>
     </Panel>
@@ -642,6 +673,7 @@ const BANK_LOGIN: Record<string, string> = {
   "chase": "https://www.chase.com",
   "discover": "https://www.discover.com",
   "robinhood": "https://robinhood.com",
+  "bilt": "https://www.biltrewards.com",
 };
 function loginUrl(issuer: string | null): string {
   const k = (issuer || "").toLowerCase().trim();
@@ -669,17 +701,18 @@ function CardsGrid({ items, reminders, onChange }: { items: CardSpending[]; remi
 }
 
 function CardBox({ card, rem, onChange }: { card: CardSpending; rem?: StatementReminder; onChange: () => void }) {
-  const months = useMemo(() => {
-    const set = new Set<string>();
-    card.transactions.forEach(t => { if (t.date) set.add(t.date.slice(0, 7)); });
-    return Array.from(set).sort().reverse();
+  // group this card's transactions into statements (by month)
+  const statements = useMemo(() => {
+    const m: Record<string, { key: string; count: number; total: number; txns: typeof card.transactions }> = {};
+    for (const t of card.transactions) {
+      const key = t.date ? t.date.slice(0, 7) : "undated";
+      const g = m[key] || (m[key] = { key, count: 0, total: 0, txns: [] });
+      g.count++; g.total += t.amount; g.txns.push(t);
+    }
+    return Object.values(m).sort((a, b) => b.key.localeCompare(a.key));
   }, [card]);
-  const [month, setMonth] = useState("");
-  useEffect(() => { setMonth(months[0] || ""); }, [card.liability_id, months.length]);
 
-  const txns = card.transactions.filter(t => t.date && t.date.slice(0, 7) === month);
-  const monthTotal = txns.reduce((s, t) => s + t.amount, 0);
-
+  const [open, setOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [bal, setBal] = useState("");
   const [drag, setDrag] = useState(false);
@@ -691,77 +724,116 @@ function CardBox({ card, rem, onChange }: { card: CardSpending; rem?: StatementR
     if (!isNaN(v)) await api.patch(`/api/finance/liabilities/${card.liability_id}`, { balance: v });
     setEditing(false); onChange();
   }
-  async function upload(file: File) {
+  async function uploadFiles(files: FileList | File[]) {
+    const list = Array.from(files);
+    if (!list.length) return;
     setBusy(true); setMsg(null);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("liability_id", String(card.liability_id));
-      const res = await fetch("/api/gmail/import-spending", { method: "POST", body: fd });
-      const r = await res.json();
-      setMsg(r.available ? `+${r.transactions_added} txns${r.balance_updated ? ` · $${r.balance}` : ""}` : (r.reason || "failed"));
-      if (r.available) onChange();
-    } catch (e: any) { setMsg(String(e?.message || e)); }
-    finally { setBusy(false); }
+    let added = 0, ok = 0; let lastBal: number | null = null;
+    for (const file of list) {
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("liability_id", String(card.liability_id));
+        const res = await fetch("/api/gmail/import-spending", { method: "POST", body: fd });
+        const r = await res.json();
+        if (r.available) { added += r.transactions_added || 0; ok++; if (r.balance_updated) lastBal = r.balance; }
+      } catch { /* skip this file, keep going */ }
+    }
+    setMsg(`+${added} txns from ${ok}/${list.length} file(s)${lastBal != null ? ` · $${lastBal}` : ""}`);
+    setBusy(false);
+    onChange();
+  }
+  async function deleteStatement(month: string) {
+    if (!window.confirm("Delete this statement's transactions? Your balance won't change.")) return;
+    await api.post("/api/gmail/delete-statement", { liability_id: card.liability_id, month });
+    setOpen(null); onChange();
   }
 
+  const monthLabel = (k: string) => k === "undated" ? "Undated"
+    : new Date(k + "-01T00:00:00").toLocaleDateString(undefined, { month: "long", year: "numeric" });
   const dueTxt = rem?.due_date
     ? new Date(rem.due_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })
     : (card.due_day_of_month ? `day ${card.due_day_of_month}` : null);
   const badge = card.source === "email" ? { t: "auto", c: "#22e8a0" }
     : rem?.needs_update ? { t: "new stmt", c: "#ff9c2a" } : { t: "manual", c: "#94a8c9" };
+  const openStmt = statements.find(s => s.key === open);
 
   return (
-    <div className="panel flex flex-col" style={{ minHeight: 300 }}
-      onDragOver={e => { e.preventDefault(); setDrag(true); }}
-      onDragLeave={() => setDrag(false)}
-      onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files?.[0]; if (f) upload(f); }}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-[13px] font-medium text-jarvis-text truncate">{card.name}</div>
-          <div className="text-[10px] text-jarvis-muted">{dueTxt ? `due ${dueTxt}` : "no due date"}</div>
+    <>
+      <div className="panel flex flex-col" style={{ minHeight: 280 }}
+        onDragOver={e => { e.preventDefault(); setDrag(true); }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={e => { e.preventDefault(); setDrag(false); if (e.dataTransfer.files?.length) uploadFiles(e.dataTransfer.files); }}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[13px] font-medium text-jarvis-text truncate">{card.name}</div>
+            <div className="text-[10px] text-jarvis-muted">{dueTxt ? `due ${dueTxt}` : "no due date"}</div>
+          </div>
+          <span className="pill shrink-0" style={{ borderColor: badge.c, color: badge.c }}>{badge.t}</span>
         </div>
-        <span className="pill shrink-0" style={{ borderColor: badge.c, color: badge.c }}>{badge.t}</span>
+
+        <div className="mt-1 mb-2 flex items-center gap-2">
+          {editing ? (
+            <>
+              <input className="input w-24" inputMode="decimal" placeholder={$(card.balance)} value={bal}
+                onChange={e => setBal(e.target.value)} onKeyDown={e => e.key === "Enter" && saveBal()} autoFocus />
+              <button className="btn" onClick={saveBal}>OK</button>
+            </>
+          ) : (
+            <button className="text-lg font-bold numeric text-jarvis-text hover:text-jarvis-accent"
+              title="click to edit balance" onClick={() => { setBal(""); setEditing(true); }}>{$(card.balance)}</button>
+          )}
+          <a className="ml-auto text-[10px] text-jarvis-accent shrink-0" href={loginUrl(card.name)} target="_blank" rel="noreferrer">log in ↗</a>
+        </div>
+
+        <div className="text-[10px] tracking-wider text-jarvis-muted mb-1">STATEMENTS</div>
+        <div className="flex-1 overflow-auto space-y-1 min-h-0 pr-1">
+          {statements.length === 0
+            ? <div className="text-[11px] text-jarvis-muted">None yet — drop one below.</div>
+            : statements.map(s => (
+              <button key={s.key} onClick={() => setOpen(s.key)}
+                className="w-full flex items-center justify-between rounded px-2 py-1.5 bg-jarvis-border/20 hover:bg-jarvis-accent/10 text-left">
+                <span className="text-[12px] text-jarvis-text">{monthLabel(s.key)}</span>
+                <span className="text-[12px] text-jarvis-text numeric">{s.count} txns · {$(s.total)} ›</span>
+              </button>
+            ))}
+        </div>
+
+        <label className={`mt-2 block text-center text-[13px] font-medium rounded border border-dashed py-2.5 cursor-pointer transition ${drag ? "border-jarvis-accent bg-jarvis-accent/10 text-jarvis-accent" : "border-jarvis-border text-jarvis-text hover:border-jarvis-accent/60"}`}>
+          {busy ? "parsing…" : (msg || "⬇ drop statements / click — CSV · Excel · PDF")}
+          <input type="file" accept=".csv,.xlsx,.xlsm,.xls,.pdf" multiple className="hidden" disabled={busy}
+            onChange={e => { if (e.target.files?.length) uploadFiles(e.target.files); e.currentTarget.value = ""; }} />
+        </label>
       </div>
 
-      <div className="mt-1 mb-2 flex items-center gap-2">
-        {editing ? (
-          <>
-            <input className="input w-24" inputMode="decimal" placeholder={$(card.balance)} value={bal}
-              onChange={e => setBal(e.target.value)} onKeyDown={e => e.key === "Enter" && saveBal()} autoFocus />
-            <button className="btn" onClick={saveBal}>OK</button>
-          </>
-        ) : (
-          <button className="text-lg font-bold numeric text-jarvis-text hover:text-jarvis-accent"
-            title="click to edit balance" onClick={() => { setBal(""); setEditing(true); }}>{$(card.balance)}</button>
-        )}
-        <a className="ml-auto text-[10px] text-jarvis-accent shrink-0" href={loginUrl(card.name)} target="_blank" rel="noreferrer">log in ↗</a>
-      </div>
-
-      <div className="flex items-center justify-between mb-1">
-        <select className="input text-[11px] py-0.5 px-1" value={month} onChange={e => setMonth(e.target.value)} disabled={months.length === 0}>
-          {months.length === 0 ? <option value="">no transactions</option> : months.map(m => <option key={m} value={m}>{m}</option>)}
-        </select>
-        {txns.length > 0 && <span className="text-[10px] text-jarvis-muted numeric">{$(monthTotal)} · {txns.length}</span>}
-      </div>
-
-      <div className="flex-1 overflow-auto text-[11px] space-y-0.5 min-h-0 pr-1">
-        {txns.length === 0
-          ? <div className="text-jarvis-muted">No transactions yet.</div>
-          : txns.map((t, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className="truncate flex-1 text-jarvis-dim">{t.merchant}</span>
-              <span className="numeric text-jarvis-text shrink-0">{$(t.amount)}</span>
+      {openStmt && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setOpen(null)}>
+          <div className="panel w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <div className="font-bold text-jarvis-text">{card.name}</div>
+                <div className="text-[11px] text-jarvis-muted">{monthLabel(openStmt.key)} · {openStmt.count} transactions · {$(openStmt.total)}</div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button className="btn btn-ghost" style={{ color: "#ff5c6c", borderColor: "#ff5c6c55" }}
+                  onClick={() => deleteStatement(openStmt.key)}>🗑 delete</button>
+                <button className="btn btn-ghost" onClick={() => setOpen(null)}>✕ close</button>
+              </div>
             </div>
-          ))}
-      </div>
-
-      <label className={`mt-2 block text-center text-[10px] rounded border border-dashed py-2 cursor-pointer transition ${drag ? "border-jarvis-accent bg-jarvis-accent/10 text-jarvis-accent" : "border-jarvis-border text-jarvis-muted hover:border-jarvis-accent/60"}`}>
-        {busy ? "parsing…" : (msg || "⬇ drop statement / click — CSV · Excel · PDF")}
-        <input type="file" accept=".csv,.xlsx,.xlsm,.xls,.pdf" className="hidden" disabled={busy}
-          onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.currentTarget.value = ""; }} />
-      </label>
-    </div>
+            <div className="flex-1 overflow-auto text-[12px] min-h-0 pr-1">
+              {openStmt.txns.map((t, i) => (
+                <div key={i} className="flex items-center gap-2 py-1 border-b border-jarvis-border/30 last:border-0">
+                  <span className="text-[10px] text-jarvis-muted w-12 shrink-0">{t.date ? new Date(t.date).toLocaleDateString(undefined, { month: "numeric", day: "numeric" }) : ""}</span>
+                  <span className="truncate flex-1 text-jarvis-text">{t.merchant}</span>
+                  <span className="text-[10px] text-jarvis-muted shrink-0">{t.category}</span>
+                  <span className="numeric text-jarvis-text shrink-0 w-16 text-right">{$(t.amount)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

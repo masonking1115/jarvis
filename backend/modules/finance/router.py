@@ -185,6 +185,20 @@ _FREQ_PER_MONTH = {
 }
 
 
+def _net_rate(annual_gross: float) -> float:
+    """Rough combined federal + CA state + FICA take-home rate, progressive.
+    CA-leaning (highest-tax state) — better than a flat 75% for high earners."""
+    if annual_gross <= 50_000:
+        return 0.85
+    if annual_gross <= 100_000:
+        return 0.75
+    if annual_gross <= 200_000:
+        return 0.67   # e.g. $164k CA single ≈ $9.2k/mo net
+    if annual_gross <= 400_000:
+        return 0.60
+    return 0.55
+
+
 def _project_next_pay(src: IncomeSource) -> tuple[date | None, float | None, int | None]:
     """Return (next_pay_date, amount, days_until). Rolls forward the stored date
     if it's already in the past, based on the source's frequency."""
@@ -251,11 +265,11 @@ def overview(db: Session = Depends(get_db)):
         if pay_date and days is not None:
             if soonest_days is None or days < soonest_days:
                 soonest_pay, soonest_amount, soonest_days = pay_date, amount, days
-    # rough net = 75% of gross unless the source says it's already net
-    estimated_net = sum(
-        (src.amount or 0) * _FREQ_PER_MONTH.get(src.frequency, 1) * (1.0 if not src.is_gross else 0.75)
-        for src in income_sources
-    )
+    # net = progressive CA-aware take-home of gross, unless the source is already net
+    estimated_net = 0.0
+    for src in income_sources:
+        monthly = (src.amount or 0) * _FREQ_PER_MONTH.get(src.frequency, 1)
+        estimated_net += monthly if not src.is_gross else monthly * _net_rate(monthly * 12)
 
     # monthly expense from last 30 days of transactions (absolute value)
     cutoff = datetime.utcnow() - timedelta(days=30)

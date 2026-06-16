@@ -128,6 +128,16 @@ def card_spending(db: Session = Depends(get_db)):
     return service.get_card_spending(db)
 
 
+class DeleteStatementIn(BaseModel):
+    liability_id: int
+    month: str   # 'YYYY-MM' or 'undated'
+
+
+@router.post("/delete-statement")
+def delete_statement(body: DeleteStatementIn, db: Session = Depends(get_db)):
+    return {"available": True, **service.delete_statement(db, body.liability_id, body.month)}
+
+
 @router.post("/extract-spending")
 def extract_spending(db: Session = Depends(get_db)):
     try:

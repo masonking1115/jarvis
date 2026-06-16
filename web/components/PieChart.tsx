@@ -55,9 +55,9 @@ export function PieChart({
         {segs.map((s, i) => (
           <li key={i} className="flex items-center gap-2 min-w-0">
             <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: s.color }} />
-            {/* % sits right next to the chart/label (not flung to the far right) */}
+            {/* %, label, then $ — all packed left so the value sits right next to the description */}
             <span className="numeric text-jarvis-text shrink-0 w-9 text-right">{Math.round(s.frac * 100)}%</span>
-            <span className="truncate text-jarvis-dim flex-1">{s.label}</span>
+            <span className="truncate text-jarvis-dim">{s.label}</span>
             <span className="text-jarvis-muted/70 numeric shrink-0">{fmt(s.value)}</span>
           </li>
         ))}

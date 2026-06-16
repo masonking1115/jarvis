@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from datetime import datetime, timedelta
 
@@ -357,8 +358,19 @@ def import_transactions_to_db(db: Session, filename: str | None, blob: bytes,
                               liability_id: int | None = None) -> dict:
     """Parse an uploaded CSV/XLSX/PDF statement -> Purchases (deduped) + optional
     balance update on the chosen card. Raises file_import.UnsupportedFile on bad files."""
+    # Bilt only offers a payment-history report, so for Bilt we count listed
+    # payments as expenses (every other card excludes payments).
+    liab_name = ""
+    if liability_id:
+        _l = db.get(Liability, liability_id)
+        liab_name = (_l.name or "").lower() if _l else ""
+    include_payments = "bilt" in liab_name
+
     text = file_import.parse_file(filename, blob)
-    data = finance_extract.extract_transactions(text)
+    data = finance_extract.extract_transactions(text, include_payments=include_payments)
+    logging.getLogger("gmail.import").warning(
+        "import %r (include_payments=%s): %d chars, %d txns parsed, balance=%s",
+        filename, include_payments, len(text), len(data["transactions"]), data.get("balance"))
 
     added = 0
     for t in data["transactions"]:
@@ -416,6 +428,18 @@ def get_card_spending(db: Session, per_card: int = 300) -> list[dict]:
             } for t in txns],
         })
     return out
+
+
+def delete_statement(db: Session, liability_id: int, month: str) -> dict:
+    """Delete the imported transactions for one card+month ('YYYY-MM' or 'undated').
+    Leaves the card's balance untouched."""
+    rows = db.execute(select(Purchase).where(Purchase.liability_id == liability_id)).scalars().all()
+    ids = [r.id for r in rows
+           if (r.occurred_at.strftime("%Y-%m") if r.occurred_at else "undated") == month]
+    if ids:
+        db.execute(delete(Purchase).where(Purchase.id.in_(ids)))
+        db.commit()
+    return {"deleted": len(ids)}
 
 
 def get_spending_summary(db: Session, days: int = 90) -> dict:

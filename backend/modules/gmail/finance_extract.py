@@ -178,13 +178,25 @@ _IMPORT_SYSTEM = (
 )
 
 
-def extract_transactions(text: str) -> dict:
-    """Parse flattened statement text into {balance, transactions[]}."""
+_IMPORT_SYSTEM_INCLUDE_PAYMENTS = (
+    "You are given the flattened text of a credit-card payment/transaction report. "
+    "Treat EVERY listed payment/charge row as an expense. Respond with ONLY a compact JSON "
+    'object, ASCII only, of the form {"balance": number|null, "transactions": [{"date":"YYYY-MM-DD",'
+    '"merchant":str,"amount":number,"category":one of ' + "/".join(SPEND_CATEGORIES) + ',"is_subscription":bool}]}. '
+    "Each row showing a payment/amount is one expense (amount > 0); use the payee/description as merchant. "
+    "Only exclude refunds/credits (negative amounts) and pure balance-summary lines. Include them all."
+)
+
+
+def extract_transactions(text: str, include_payments: bool = False) -> dict:
+    """Parse flattened statement text into {balance, transactions[]}.
+    include_payments=True (e.g. Bilt) counts listed payments as expenses."""
     provider = get_provider()
     if getattr(provider, "name", "") == "stub":
         return {"balance": None, "transactions": []}
+    system = _IMPORT_SYSTEM_INCLUDE_PAYMENTS if include_payments else _IMPORT_SYSTEM
     try:
-        raw = provider.chat(_IMPORT_SYSTEM, [{"role": "user", "content": text}])
+        raw = provider.chat(system, [{"role": "user", "content": text}])
         m = re.search(r"\{.*\}", raw, re.DOTALL)
         obj = json.loads(m.group(0) if m else raw)
     except Exception:  # noqa: BLE001

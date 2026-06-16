@@ -140,21 +140,24 @@ function ImportBlock({ onDone }: { onDone: () => void }) {
 
   useEffect(() => { api.get<Liability[]>("/api/finance/liabilities").then(setCards).catch(() => {}); }, []);
 
-  async function upload(file: File) {
+  async function uploadFiles(files: FileList | File[]) {
+    const list = Array.from(files);
+    if (!list.length) return;
     setBusy(true); setMsg(null);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      if (cardId) fd.append("liability_id", cardId);
-      const res = await fetch("/api/gmail/import-spending", { method: "POST", body: fd });
-      const r = await res.json();
-      if (r.available) {
-        setMsg(`Parsed ${r.parsed} txns · added ${r.transactions_added} new`
-          + (r.balance_updated ? ` · balance set to $${r.balance}` : ""));
-        onDone();
-      } else setMsg(r.reason || "Import failed.");
-    } catch (e: any) { setMsg(String(e?.message || e)); }
-    finally { setBusy(false); }
+    let added = 0, ok = 0;
+    for (const file of list) {
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        if (cardId) fd.append("liability_id", cardId);
+        const res = await fetch("/api/gmail/import-spending", { method: "POST", body: fd });
+        const r = await res.json();
+        if (r.available) { added += r.transactions_added || 0; ok++; }
+      } catch { /* skip this file, keep going */ }
+    }
+    setMsg(`Added ${added} txns from ${ok}/${list.length} file(s)`);
+    setBusy(false);
+    onDone();
   }
 
   return (
@@ -168,9 +171,9 @@ function ImportBlock({ onDone }: { onDone: () => void }) {
           {cards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <label className="btn cursor-pointer">
-          {busy ? "PARSING…" : "CHOOSE FILE"}
-          <input type="file" accept=".csv,.xlsx,.xlsm,.xls,.pdf" className="hidden" disabled={busy}
-            onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.currentTarget.value = ""; }} />
+          {busy ? "PARSING…" : "CHOOSE FILES"}
+          <input type="file" accept=".csv,.xlsx,.xlsm,.xls,.pdf" multiple className="hidden" disabled={busy}
+            onChange={e => { if (e.target.files?.length) uploadFiles(e.target.files); e.currentTarget.value = ""; }} />
         </label>
         {msg && <span className="text-xs text-jarvis-muted">{msg}</span>}
       </div>

@@ -44,7 +44,7 @@ def test_import_transactions_and_balance(monkeypatch):
     liab = Liability(name="Amex", category="credit_card", balance=0.0, source="manual")
     db.add(liab); db.commit()
 
-    monkeypatch.setattr(finance_extract, "extract_transactions", lambda text: {
+    monkeypatch.setattr(finance_extract, "extract_transactions", lambda text, **k: {
         "balance": 1234.0,
         "transactions": [
             {"date": date(2026, 6, 1), "merchant": "Coffee", "amount": 5.0,
@@ -74,7 +74,7 @@ def test_card_spending_groups_by_card(monkeypatch):
     db = _session()
     liab = Liability(name="Chase", category="credit_card", balance=0.0, source="manual")
     db.add(liab); db.commit()
-    monkeypatch.setattr(finance_extract, "extract_transactions", lambda text: {
+    monkeypatch.setattr(finance_extract, "extract_transactions", lambda text, **k: {
         "balance": 100.0,
         "transactions": [
             {"date": date(2026, 6, 1), "merchant": "Store A", "amount": 5.0, "category": "dining", "is_subscription": False},
@@ -87,3 +87,21 @@ def test_card_spending_groups_by_card(monkeypatch):
     assert chase["name"] == "Chase"
     assert len(chase["transactions"]) == 2
     assert {t["merchant"] for t in chase["transactions"]} == {"Store A", "Store B"}
+
+
+def test_delete_statement(monkeypatch):
+    db = _session()
+    liab = Liability(name="Chase", category="credit_card", balance=0.0, source="manual")
+    db.add(liab); db.commit()
+    monkeypatch.setattr(finance_extract, "extract_transactions", lambda text, **k: {
+        "balance": None,
+        "transactions": [
+            {"date": date(2026, 6, 1), "merchant": "June A", "amount": 5.0, "category": "dining", "is_subscription": False},
+            {"date": date(2026, 5, 1), "merchant": "May B", "amount": 9.0, "category": "shopping", "is_subscription": False},
+        ],
+    })
+    service.import_transactions_to_db(db, "c.csv", b"x", liability_id=liab.id)
+    r = service.delete_statement(db, liab.id, "2026-06")
+    assert r["deleted"] == 1
+    chase = next(c for c in service.get_card_spending(db) if c["liability_id"] == liab.id)
+    assert len(chase["transactions"]) == 1 and chase["transactions"][0]["merchant"] == "May B"
