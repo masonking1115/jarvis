@@ -59,9 +59,9 @@ class Settings(BaseSettings):
     flyover_default_units: str = "imperial"   # imperial | metric
     # Default location shown until the user sets one (via the in-app gear). Change
     # these in .env to point the flyover somewhere else out of the box.
-    flyover_default_address: str = "Atherton, CA"
-    flyover_default_lat: float = 37.4613
-    flyover_default_lng: float = -122.1977
+    flyover_default_address: str = "2 McCormick Lane, Atherton, CA"
+    flyover_default_lat: float = 37.46612
+    flyover_default_lng: float = -122.19684
 
     @property
     def cors_list(self) -> list[str]:
