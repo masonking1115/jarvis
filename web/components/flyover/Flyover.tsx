@@ -175,7 +175,7 @@ export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }
           backdrop on ALL four sides (a radial gradient only darkens corners,
           which is why the earlier version showed "no taper"). */}
       <div className="pointer-events-none absolute inset-0"
-        style={{ boxShadow: "inset 0 0 12px 30px #04080f" }} />
+        style={{ boxShadow: "inset 0 0 48px 60px #04080f" }} />
       {/* Dashboard-style chrome: cyan panel border + corner cuts framing the view */}
       <div className="pointer-events-none absolute inset-2 rounded-[14px] corner-cuts"
         style={{
