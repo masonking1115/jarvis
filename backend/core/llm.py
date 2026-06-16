@@ -90,6 +90,25 @@ class ClaudeCliProvider:
             raise RuntimeError(f"claude cli failed ({proc.returncode}): {proc.stderr[:300]}")
         return proc.stdout.strip().replace("�", "-")  # tidy stray decode artifacts
 
+    def web_answer(self, query: str, model: str | None = None) -> str:
+        """One-shot web search via the CLI's WebSearch/WebFetch tools (no API key)."""
+        if not self.available:
+            raise RuntimeError("claude CLI not found on PATH")
+        import os, subprocess, tempfile
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
+        prompt = ("Search the web and answer for spoken delivery — 2-3 sentences, "
+                  "plain text, no markdown, no lists:\n\n" + (query or ""))
+        cmd = [self.path, "-p", prompt, "--allowedTools", "WebSearch", "WebFetch",
+               "--output-format", "text", "--model", (model or self.model)]
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            env=env, cwd=tempfile.gettempdir(), timeout=120,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"claude web search failed ({proc.returncode}): {proc.stderr[:200]}")
+        return proc.stdout.strip().replace("�", "-")
+
 
 class StubProvider:
     name = "stub"
