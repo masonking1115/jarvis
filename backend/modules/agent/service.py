@@ -13,16 +13,16 @@ from backend.modules.profile import storage as profile_storage
 from . import registry
 
 _PLAN_INSTRUCTION = (
-    "Decide if the user's latest message needs an ACTION or just a REPLY.\n"
-    "{tools}\n\n"
+    "Decide what the user's latest message needs, using the actions and skills listed above.\n"
     "Respond with ONLY a JSON object — no prose, no code fences:\n"
     '- Plain answer: {"kind":"reply","text":"<concise spoken answer>"}\n'
     '- Action: {"kind":"action","tool":"<one of the action names>","args":{...},'
     '"ack":"<short spoken acknowledgement, e.g. \'Yes sir, performing the weather search now.\'>"}\n'
-    "Use an action only when it clearly matches one above; otherwise reply.\n"
-    "Be proactive: when the user's known facts and goals are relevant, connect "
-    "them to the moment and suggest or take the next concrete step toward a goal "
-    "(still confirming anything irreversible first)."
+    '- Specialized skill: {"kind":"skill","name":"<one of the skill names>"}\n'
+    "Prefer a skill when the request matches its description; use an action when it matches one; "
+    "otherwise reply. If the user explicitly names a skill, use that skill.\n"
+    "Be proactive: when the user's known facts and goals are relevant, connect them to the moment "
+    "and suggest or take the next concrete step toward a goal (confirming anything irreversible first)."
 )
 
 
@@ -38,22 +38,33 @@ def _parse(raw: str) -> dict:
     if i != -1 and j != -1 and j > i:
         try:
             obj = json.loads(s[i:j + 1])
-            if isinstance(obj, dict) and obj.get("kind") in ("reply", "action"):
+            if isinstance(obj, dict) and obj.get("kind") in ("reply", "action", "skill"):
                 return obj
         except Exception:  # noqa: BLE001
             pass
     return {"kind": "reply", "text": (raw or "").strip() or "I'm not sure, sir."}
 
 
-def plan(db: Session, messages: list[dict]) -> dict:
+def plan(db: Session, messages: list[dict], skill: str | None = None) -> dict:
+    # Lazy import avoids an import cycle (skills.service imports agent.service._parse).
+    from backend.modules.skills import service as skills_service
+    if skill:
+        return skills_service.answer(db, skill, messages)
+
     provider = get_provider()
     facts = profile_storage.get_context(db)
     system = load_persona()
     if facts:
         system += "\n\n" + facts
-    system += "\n\n" + _PLAN_INSTRUCTION.replace("{tools}", registry.render())
+    system += "\n\n" + skills_service.router_context(db) + "\n\n" + _PLAN_INSTRUCTION
     raw = provider.chat(system=system, messages=messages, model=settings.voice_model)
     out = _parse(raw)
+
+    if out.get("kind") == "skill":
+        name = out.get("name")
+        if any(s.name == name for s in skills_service.registry.enabled_instruction_skills(db)):
+            return skills_service.answer(db, name, messages)
+        return {"kind": "reply", "text": "I'm not sure how to help with that, sir."}
     if out.get("kind") == "action" and out.get("tool") not in registry.NAMES:
         return {"kind": "reply", "text": out.get("ack") or "I can't do that yet, sir."}
     return out

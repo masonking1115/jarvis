@@ -188,3 +188,39 @@ def test_endpoint_toggle_unknown_404(db):
     from fastapi import HTTPException
     with _pytest.raises(HTTPException):
         skills_router.toggle("does-not-exist", skills_router.TogglePatch(enabled=True), db=db)
+
+
+def test_plan_routes_to_skill(monkeypatch):
+    from backend.modules.agent import service as agent_service
+
+    calls = {"n": 0}
+    class P:
+        name = "p"
+        def chat(self, system, messages, model=None):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return '{"kind":"skill","name":"tax-helper"}'      # stage 1 routes
+            return '{"kind":"reply","text":"Per your documents, sir."}'  # stage 2 answers
+    monkeypatch.setattr(agent_service, "get_provider", lambda o=None: P())
+    from backend.modules.skills import service as ss
+    monkeypatch.setattr(ss, "get_provider", lambda o=None: P())
+    monkeypatch.setattr(ss, "load_persona", lambda: "persona")
+    monkeypatch.setattr(ss, "_build_context", lambda db: "ctx")
+
+    out = agent_service.plan(FakeDB2(), [{"role": "user", "content": "help with my taxes"}])
+    assert out["kind"] == "reply" and "documents" in out["text"]
+    assert calls["n"] == 2     # two-stage
+
+
+def test_plan_forced_skill_skips_routing(monkeypatch):
+    from backend.modules.agent import service as agent_service
+    from backend.modules.skills import service as ss
+    class P:
+        name = "p"
+        def chat(self, system, messages, model=None):
+            return '{"kind":"reply","text":"forced tax answer"}'
+    monkeypatch.setattr(ss, "get_provider", lambda o=None: P())
+    monkeypatch.setattr(ss, "load_persona", lambda: "persona")
+    monkeypatch.setattr(ss, "_build_context", lambda db: "ctx")
+    out = agent_service.plan(FakeDB2(), [{"role": "user", "content": "anything"}], skill="tax-helper")
+    assert out["kind"] == "reply" and out["text"] == "forced tax answer"
