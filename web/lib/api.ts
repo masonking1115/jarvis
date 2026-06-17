@@ -253,6 +253,21 @@ export const profile = {
   remove: (id: number)                        => api.del<{ ok: boolean }>(`/api/profile/${id}`),
 };
 
+// ---- Skills (extensible capability registry) ----
+export type Skill = {
+  name: string;
+  kind: string;            // instruction | action
+  when_to_use: string;
+  actions: string[];
+  enabled: boolean;
+};
+
+export const skills = {
+  list:   ()                              => api.get<{ skills: Skill[]; count: number }>("/api/skills"),
+  toggle: (name: string, enabled: boolean) =>
+            api.patch<{ name: string; enabled: boolean }>(`/api/skills/${name}`, { enabled }),
+};
+
 // ---- Flyover (photoreal address view) ----
 export type FlyoverConfig = {
   available: boolean;
