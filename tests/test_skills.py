@@ -73,3 +73,42 @@ def test_skillsetting_defaults(db):
     row = SkillSetting(name="tax-helper")
     db.add(row); db.commit(); db.refresh(row)
     assert row.id is not None and row.enabled is True
+
+
+from backend.modules.skills import registry
+
+
+def test_all_skills_includes_both_kinds(db):
+    skills = registry.all_skills(db)
+    kinds = {s.name: s.kind for s in skills}
+    assert kinds.get("tax-helper") == "instruction"
+    assert kinds.get("weather") == "action"
+
+
+def test_disable_overlay_hides_from_enabled(db):
+    db.add(SkillSetting(name="tax-helper", enabled=False)); db.commit()
+    enabled = {s.name for s in registry.enabled_instruction_skills(db)}
+    assert "tax-helper" not in enabled
+    assert "fitness-coach" in enabled
+
+
+def test_general_actions_filtered_by_disable(db):
+    names = [t["name"] for t in registry.general_action_tools(db)]
+    assert "weather" in names
+    db.add(SkillSetting(name="weather", enabled=False)); db.commit()
+    names2 = [t["name"] for t in registry.general_action_tools(db)]
+    assert "weather" not in names2
+
+
+def test_skill_action_tools_scopes(db):
+    tools = registry.skill_action_tools(db, ["web_search"])
+    assert [t["name"] for t in tools] == ["web_search"]
+
+
+def test_disabled_names_resilient_to_missing_table():
+    # FakeDB has no real table; must not raise, returns empty set
+    class FakeDB:
+        def query(self, *a, **k): return self
+        def filter(self, *a, **k): return self
+        def all(self): raise RuntimeError("no such table")
+    assert registry._disabled_names(FakeDB()) == set()
