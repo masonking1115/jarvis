@@ -48,3 +48,28 @@ def test_load_skills_reads_dir(tmp_path):
 def test_load_skills_includes_seeds():
     names = [s.name for s in loader.load_skills()]   # default dir = backend/skills
     assert "tax-helper" in names and "fitness-coach" in names
+
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from backend.core.db import Base
+from backend.modules.skills.models import SkillSetting
+
+
+@pytest.fixture
+def db():
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine, tables=[SkillSetting.__table__])
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    s = Session()
+    try:
+        yield s
+    finally:
+        s.close()
+
+
+def test_skillsetting_defaults(db):
+    row = SkillSetting(name="tax-helper")
+    db.add(row); db.commit(); db.refresh(row)
+    assert row.id is not None and row.enabled is True
