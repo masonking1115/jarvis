@@ -136,7 +136,8 @@ def daily_briefing(db: Session = Depends(get_db)):
     system = f"{load_persona()}\n\n{context}"
     user_msg = (
         "Give me a concise morning briefing: top 3 priorities for today based on my tasks and goals, "
-        "any deadlines I should know about, and one focused recommendation. Keep it under 200 words."
+        "any deadlines I should know about, and one focused recommendation. Where it's relevant, tie "
+        "advice to what you know about me (my goals, preferences, routines). Keep it under 200 words."
     )
     reply = provider.chat(system=system, messages=[{"role": "user", "content": user_msg}])
     return ChatResponse(reply=reply, provider=provider.name)

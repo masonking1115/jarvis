@@ -162,6 +162,12 @@ def test_planner_system_includes_facts(db, monkeypatch):
     assert "Save for a house" in captured["system"]
 
 
+def test_plan_instruction_mentions_proactive():
+    from backend.modules.agent import service
+    assert "goal" in service._PLAN_INSTRUCTION.lower()
+    assert "proactive" in service._PLAN_INSTRUCTION.lower()
+
+
 def test_agent_plan_schedules_extraction(db, monkeypatch):
     import importlib
     from backend.modules.agent import service

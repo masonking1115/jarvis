@@ -19,7 +19,10 @@ _PLAN_INSTRUCTION = (
     '- Plain answer: {"kind":"reply","text":"<concise spoken answer>"}\n'
     '- Action: {"kind":"action","tool":"<one of the action names>","args":{...},'
     '"ack":"<short spoken acknowledgement, e.g. \'Yes sir, performing the weather search now.\'>"}\n'
-    "Use an action only when it clearly matches one above; otherwise reply."
+    "Use an action only when it clearly matches one above; otherwise reply.\n"
+    "Be proactive: when the user's known facts and goals are relevant, connect "
+    "them to the moment and suggest or take the next concrete step toward a goal "
+    "(still confirming anything irreversible first)."
 )
 
 
