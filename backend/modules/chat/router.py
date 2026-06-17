@@ -10,6 +10,7 @@ from backend.core.llm import get_provider
 from backend.modules.tasks.models import Task
 from backend.modules.goals.models import Goal
 from backend.modules.finance.models import Asset, Liability, Transaction
+from backend.modules.profile import storage as profile_storage
 
 
 router = APIRouter()
@@ -102,6 +103,9 @@ def _build_context(db: Session) -> str:
         for t in recent:
             sign = "-" if t.amount < 0 else "+"
             lines.append(f"  - {t.occurred_at.date()} {sign}${abs(t.amount):,.0f} {t.category}")
+    facts = profile_storage.get_context(db)
+    if facts:
+        lines += ["", facts]
     return "\n".join(lines)
 
 

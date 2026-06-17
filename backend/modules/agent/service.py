@@ -9,6 +9,7 @@ from backend.core.llm import get_provider, ClaudeCliProvider
 from backend.modules.chat.router import load_persona
 from backend.modules.flyover import geocode as fly_geocode, weather as fly_weather
 from backend.modules.flyover.models import get_or_create as fly_settings
+from backend.modules.profile import storage as profile_storage
 from . import registry
 
 _PLAN_INSTRUCTION = (
@@ -43,7 +44,11 @@ def _parse(raw: str) -> dict:
 
 def plan(db: Session, messages: list[dict]) -> dict:
     provider = get_provider()
-    system = load_persona() + "\n\n" + _PLAN_INSTRUCTION.replace("{tools}", registry.render())
+    facts = profile_storage.get_context(db)
+    system = load_persona()
+    if facts:
+        system += "\n\n" + facts
+    system += "\n\n" + _PLAN_INSTRUCTION.replace("{tools}", registry.render())
     raw = provider.chat(system=system, messages=messages, model=settings.voice_model)
     out = _parse(raw)
     if out.get("kind") == "action" and out.get("tool") not in registry.NAMES:

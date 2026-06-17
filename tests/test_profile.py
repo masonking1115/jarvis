@@ -145,3 +145,18 @@ def test_endpoint_patch_missing_404(db):
     from fastapi import HTTPException
     with _pytest.raises(HTTPException):
         profile_router.patch(999, profile_router.FactPatch(content="z"), db=db)
+
+
+def test_planner_system_includes_facts(db, monkeypatch):
+    from backend.modules.agent import service
+    storage.create_fact(db, category="goal", content="Save for a house", source="explicit", confidence=1.0)
+
+    captured = {}
+    class P:
+        name = "p"
+        def chat(self, system, messages, model=None):
+            captured["system"] = system
+            return '{"kind":"reply","text":"Noted, sir."}'
+    monkeypatch.setattr(service, "get_provider", lambda o=None: P())
+    service.plan(db, [{"role": "user", "content": "hi"}])
+    assert "Save for a house" in captured["system"]
