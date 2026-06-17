@@ -117,3 +117,31 @@ def test_extract_swallows_provider_error(db, monkeypatch):
     # must not raise
     extract_mod.extract_and_store(db, "x", "y")
     assert storage.list_facts(db) == []
+
+
+import importlib
+profile_router = importlib.import_module("backend.modules.profile.router")
+
+
+def test_endpoint_create_and_list(db):
+    profile_router.create(profile_router.FactIn(category="goal", content="Learn piano"), db=db)
+    out = profile_router.list_facts(db=db)
+    assert out["count"] == 1
+    assert out["facts"][0]["content"] == "Learn piano"
+    assert out["facts"][0]["source"] == "explicit"   # manual adds are explicit
+
+
+def test_endpoint_patch_and_delete(db):
+    f = storage.create_fact(db, category="other", content="x")
+    patched = profile_router.patch(f.id, profile_router.FactPatch(content="y", pinned=True), db=db)
+    assert patched["content"] == "y" and patched["pinned"] is True
+    res = profile_router.delete(f.id, db=db)
+    assert res["ok"] is True
+    assert profile_router.list_facts(db=db)["count"] == 0
+
+
+def test_endpoint_patch_missing_404(db):
+    import pytest as _pytest
+    from fastapi import HTTPException
+    with _pytest.raises(HTTPException):
+        profile_router.patch(999, profile_router.FactPatch(content="z"), db=db)
