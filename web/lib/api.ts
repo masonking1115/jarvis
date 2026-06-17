@@ -232,6 +232,27 @@ export const tax = {
   },
 };
 
+// ---- Profile (what JARVIS knows about me) ----
+export type UserFact = {
+  id: number;
+  category: string;        // preference | goal | routine | relationship | context | dislike | other
+  content: string;
+  source: string;          // explicit | inferred
+  confidence: number;
+  status: string;          // active | archived
+  pinned: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export const profile = {
+  list:   ()                                  => api.get<{ facts: UserFact[]; count: number }>("/api/profile"),
+  add:    (category: string, content: string) => api.post<UserFact>("/api/profile", { category, content }),
+  update: (id: number, patch: Partial<Pick<UserFact, "category" | "content" | "confidence" | "pinned" | "status">>) =>
+            api.patch<UserFact>(`/api/profile/${id}`, patch),
+  remove: (id: number)                        => api.del<{ ok: boolean }>(`/api/profile/${id}`),
+};
+
 // ---- Flyover (photoreal address view) ----
 export type FlyoverConfig = {
   available: boolean;
