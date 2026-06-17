@@ -112,3 +112,53 @@ def test_disabled_names_resilient_to_missing_table():
         def filter(self, *a, **k): return self
         def all(self): raise RuntimeError("no such table")
     assert registry._disabled_names(FakeDB()) == set()
+
+
+from backend.modules.skills import service as skills_service
+
+
+class FakeDB2:   # no real tables; registry._disabled_names handles the raise
+    def query(self, *a, **k): return self
+    def filter(self, *a, **k): return self
+    def all(self): return []
+    def order_by(self, *a, **k): return self
+    def limit(self, *a, **k): return self
+
+
+def test_router_context_lists_actions_and_skills():
+    ctx = skills_service.router_context(FakeDB2())
+    assert "web_search" in ctx
+    assert "tax-helper" in ctx and "fitness-coach" in ctx
+
+
+def test_answer_unknown_skill_replies():
+    out = skills_service.answer(FakeDB2(), "nope", [{"role": "user", "content": "hi"}])
+    assert out["kind"] == "reply"
+
+
+def test_answer_drops_action_outside_skill_scope(monkeypatch):
+    # tax-helper declares actions: [] -> any action must be rejected -> reply
+    monkeypatch.setattr(skills_service, "get_provider",
+                        lambda o=None: type("P", (), {"name": "p",
+                        "chat": lambda self, system, messages, model=None:
+                        '{"kind":"action","tool":"weather","args":{},"ack":"no"}'})())
+    monkeypatch.setattr(skills_service, "load_persona", lambda: "persona")
+    monkeypatch.setattr(skills_service, "_build_context", lambda db: "ctx")
+    out = skills_service.answer(FakeDB2(), "tax-helper", [{"role": "user", "content": "x"}])
+    assert out["kind"] == "reply"
+
+
+def test_answer_allows_declared_action(monkeypatch):
+    from backend.modules.skills import loader as ldr
+    from backend.modules.skills.loader import InstructionSkill
+    monkeypatch.setattr(ldr, "load_skills", lambda d=None: [
+        InstructionSkill(name="trip", when_to_use="travel", body="plan trips",
+                         actions=["web_search"], enabled=True)])
+    monkeypatch.setattr(skills_service, "get_provider",
+                        lambda o=None: type("P", (), {"name": "p",
+                        "chat": lambda self, system, messages, model=None:
+                        '{"kind":"action","tool":"web_search","args":{"query":"q"},"ack":"ok"}'})())
+    monkeypatch.setattr(skills_service, "load_persona", lambda: "persona")
+    monkeypatch.setattr(skills_service, "_build_context", lambda db: "ctx")
+    out = skills_service.answer(FakeDB2(), "trip", [{"role": "user", "content": "x"}])
+    assert out["kind"] == "action" and out["tool"] == "web_search"
