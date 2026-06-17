@@ -37,3 +37,19 @@ def synthesize(text: str, voice: str | None = None) -> bytes:
     )
     r.raise_for_status()
     return r.content
+
+
+def issue_token() -> tuple[str, str]:
+    """Mint a short-lived Azure Speech auth token (~10 min) from the key.
+    Returns (token, region). The key never leaves the server."""
+    if not settings.azure_speech_key:
+        raise NotConfigured("Set AZURE_SPEECH_KEY in backend/.env")
+    region = settings.azure_speech_region
+    url = f"https://{region}.api.cognitive.microsoft.com/sts/v1.0/issueToken"
+    r = httpx.post(
+        url,
+        headers={"Ocp-Apim-Subscription-Key": settings.azure_speech_key, "Content-Length": "0"},
+        timeout=10,
+    )
+    r.raise_for_status()
+    return r.text, region
