@@ -1,2 +1,3 @@
-# placeholder until router.py exists (replaced in Task 5)
-router = None
+from .router import router
+
+__all__ = ["router"]

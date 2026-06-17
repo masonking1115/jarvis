@@ -162,3 +162,29 @@ def test_answer_allows_declared_action(monkeypatch):
     monkeypatch.setattr(skills_service, "_build_context", lambda db: "ctx")
     out = skills_service.answer(FakeDB2(), "trip", [{"role": "user", "content": "x"}])
     assert out["kind"] == "action" and out["tool"] == "web_search"
+
+
+import importlib
+skills_router = importlib.import_module("backend.modules.skills.router")
+
+
+def test_endpoint_list(db):
+    out = skills_router.list_skills(db=db)
+    names = {s["name"] for s in out["skills"]}
+    assert "tax-helper" in names and "weather" in names
+    tax = next(s for s in out["skills"] if s["name"] == "tax-helper")
+    assert tax["kind"] == "instruction" and tax["actions"] == [] and tax["enabled"] is True
+
+
+def test_endpoint_toggle(db):
+    res = skills_router.toggle("tax-helper", skills_router.TogglePatch(enabled=False), db=db)
+    assert res["enabled"] is False
+    tax = next(s for s in skills_router.list_skills(db=db)["skills"] if s["name"] == "tax-helper")
+    assert tax["enabled"] is False
+
+
+def test_endpoint_toggle_unknown_404(db):
+    import pytest as _pytest
+    from fastapi import HTTPException
+    with _pytest.raises(HTTPException):
+        skills_router.toggle("does-not-exist", skills_router.TogglePatch(enabled=True), db=db)
