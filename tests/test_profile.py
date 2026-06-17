@@ -67,3 +67,53 @@ def test_get_context_orders_pinned_then_confidence(db):
 
 def test_get_context_empty_is_blank(db):
     assert storage.get_context(db) == ""
+
+
+from backend.modules.profile import extract as extract_mod
+
+
+class _Provider:
+    """Stub LLM returning a fixed JSON action list."""
+    name = "stub"
+    def __init__(self, payload): self.payload = payload
+    def chat(self, system, messages, model=None): return self.payload
+
+
+def test_extract_adds_new_fact(db, monkeypatch):
+    payload = '[{"action":"add","category":"goal","content":"Run a marathon","confidence":0.8,"source":"inferred"}]'
+    monkeypatch.setattr(extract_mod, "get_provider", lambda o=None: _Provider(payload))
+    extract_mod.extract_and_store(db, "I want to run a marathon someday", "Noted, sir.")
+    facts = storage.list_facts(db)
+    assert len(facts) == 1 and facts[0].content == "Run a marathon"
+
+
+def test_extract_updates_existing(db, monkeypatch):
+    f = storage.create_fact(db, category="preference", content="Prefers morning workouts")
+    payload = f'[{{"action":"update","id":{f.id},"category":"preference","content":"Prefers evening workouts","confidence":0.9}}]'
+    monkeypatch.setattr(extract_mod, "get_provider", lambda o=None: _Provider(payload))
+    extract_mod.extract_and_store(db, "actually I train at night now", "Understood, sir.")
+    assert storage.get_fact(db, f.id).content == "Prefers evening workouts"
+
+
+def test_extract_archives(db, monkeypatch):
+    f = storage.create_fact(db, category="goal", content="Buy a boat")
+    payload = f'[{{"action":"archive","id":{f.id}}}]'
+    monkeypatch.setattr(extract_mod, "get_provider", lambda o=None: _Provider(payload))
+    extract_mod.extract_and_store(db, "I no longer want a boat", "Very good, sir.")
+    assert storage.list_facts(db) == []
+
+
+def test_extract_garbage_writes_nothing(db, monkeypatch):
+    monkeypatch.setattr(extract_mod, "get_provider", lambda o=None: _Provider("not json at all"))
+    extract_mod.extract_and_store(db, "hello", "Good day, sir.")
+    assert storage.list_facts(db) == []
+
+
+def test_extract_swallows_provider_error(db, monkeypatch):
+    class Boom:
+        name = "boom"
+        def chat(self, *a, **k): raise RuntimeError("cli down")
+    monkeypatch.setattr(extract_mod, "get_provider", lambda o=None: Boom())
+    # must not raise
+    extract_mod.extract_and_store(db, "x", "y")
+    assert storage.list_facts(db) == []
