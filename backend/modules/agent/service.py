@@ -83,10 +83,14 @@ def run(db: Session, tool: str, args: dict | None) -> dict:
         if tool == "weather":
             return {"text": _weather_line(db, args.get("location"))}
         if tool == "web_search":
-            provider = get_provider()
             q = args.get("query") or ""
-            if isinstance(provider, ClaudeCliProvider) and provider.available:
-                return {"text": provider.web_answer(q, model=settings.agent_search_model)}
+            # Hybrid: web search always goes through the Claude CLI (Max plan),
+            # which has live WebSearch/WebFetch tools — even when the default
+            # provider is the (faster) Anthropic API, which has no web access.
+            cli = ClaudeCliProvider()
+            if cli.available:
+                return {"text": cli.web_answer(q, model=settings.agent_search_model)}
+            provider = get_provider()
             return {"text": provider.chat(
                 system=load_persona(), messages=[{"role": "user", "content": q}], model=settings.voice_model)}
         return {"text": "I can't do that yet, sir."}

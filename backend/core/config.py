@@ -77,3 +77,16 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# pydantic prioritizes OS environment variables over the .env file. This machine
+# carries a stale ANTHROPIC_API_KEY in the environment (the Claude CLI provider
+# strips it so the Max plan is used), which would otherwise shadow the key the
+# user manages in .env and cause 401s. Treat .env as authoritative for this key.
+try:
+    from dotenv import dotenv_values as _dotenv_values
+    _file_env = _dotenv_values(_ENV_FILE)
+    _file_anthropic = _file_env.get("ANTHROPIC_API_KEY") or _file_env.get("anthropic_api_key")
+    if _file_anthropic:
+        settings.anthropic_api_key = _file_anthropic
+except Exception:  # noqa: BLE001 — never block startup on env parsing
+    pass
