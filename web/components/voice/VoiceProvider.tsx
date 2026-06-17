@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useRef, useState, ReactNode } fro
 import { useRouter } from "next/navigation";
 import { agent, voice as voiceApi } from "@/lib/api";
 import { createRecognizer, extractCommand, speechSupported, Recognizer } from "@/lib/voice";
+import { createAzureRecognizer } from "@/lib/azureStt";
 
 const ROUTES = ["dashboard", "finance", "spending", "email", "fitness", "workouts",
   "projects", "trading", "agents", "notes", "settings", "goals", "schedule", "tax"];
@@ -205,17 +206,35 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   // Detect Web Speech support on the client only (avoids hydration mismatch).
   useEffect(() => { setSupported(speechSupported()); }, []);
 
-  // Build recognizer once; auto-restart on end while enabled.
+  // Build recognizer once: prefer Azure STT (accurate, phrase-biased), fall back
+  // to browser Web Speech. Auto-restart on end while enabled.
   useEffect(() => {
     if (!supported) return;
-    recRef.current = createRecognizer({
+    let alive = true;
+    const handlers = {
       onFinal,
       onActivity,
-      onError: (e) => { if (e === "not-allowed" || e === "service-not-allowed") setEnabled(false); },
+      onError: (e: string) => { if (e === "not-allowed" || e === "service-not-allowed") setEnabled(false); },
       onEnd: () => { if (enabledRef.current) setTimeout(() => recRef.current?.start(), 250); },
-    });
-    if (typeof window !== "undefined" && localStorage.getItem("jarvisVoice") === "1") setEnabled(true);
-    return () => recRef.current?.stop();
+    };
+    (async () => {
+      // Build the phrase list: wake word + nav routes + skill names + command verbs.
+      let skillNames: string[] = [];
+      try {
+        const r = await fetch("/api/skills");
+        if (r.ok) skillNames = ((await r.json()).skills || []).map((s: any) => s.name);
+      } catch { /* best-effort biasing */ }
+      const phrases = Array.from(new Set(
+        ["JARVIS", ...ROUTES, ...skillNames, "open", "search", "weather", "remember", "navigate"]
+      ));
+
+      let rec = await createAzureRecognizer({ ...handlers, phrases });
+      if (!rec) rec = createRecognizer(handlers);     // fall back to Web Speech
+      if (!alive) { rec?.stop(); return; }
+      recRef.current = rec;
+      if (typeof window !== "undefined" && localStorage.getItem("jarvisVoice") === "1") setEnabled(true);
+    })();
+    return () => { alive = false; recRef.current?.stop(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supported]);
 
