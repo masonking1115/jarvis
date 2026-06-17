@@ -160,3 +160,24 @@ def test_planner_system_includes_facts(db, monkeypatch):
     monkeypatch.setattr(service, "get_provider", lambda o=None: P())
     service.plan(db, [{"role": "user", "content": "hi"}])
     assert "Save for a house" in captured["system"]
+
+
+def test_agent_plan_schedules_extraction(db, monkeypatch):
+    import importlib
+    from backend.modules.agent import service
+    agent_router = importlib.import_module("backend.modules.agent.router")
+
+    class P:
+        name = "p"
+        def chat(self, system, messages, model=None):
+            return '{"kind":"reply","text":"Good day, sir."}'
+    monkeypatch.setattr(service, "get_provider", lambda o=None: P())
+
+    scheduled = {}
+    class FakeBG:
+        def add_task(self, fn, *args):
+            scheduled["fn"] = fn; scheduled["args"] = args
+    body = agent_router.PlanIn(messages=[agent_router.Msg(role="user", content="remember I like sushi")])
+    agent_router.plan(body, background=FakeBG(), db=db)
+    assert scheduled["args"][0] == "remember I like sushi"     # user_msg
+    assert "sir" in scheduled["args"][1].lower()               # assistant text

@@ -61,7 +61,9 @@ def test_chat_voice_flag_tightens_system(monkeypatch):
         def all(self): return []
 
     req = chat_router.ChatRequest(messages=[chat_router.ChatMessage(role="user", content="hi")], voice=True)
-    chat_router.chat(req, db=FakeDB())
+    class FakeBG:
+        def add_task(self, *a, **k): pass
+    chat_router.chat(req, background=FakeBG(), db=FakeDB())
     assert "spoken dialogue" in seen["system"]
     assert seen["model"] == app_settings.voice_model     # voice uses the faster model
 

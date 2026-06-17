@@ -1,9 +1,10 @@
 """Agent endpoints (/api/agent): plan (reply vs action) + run (backend tools)."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.core.db import get_db
+from backend.modules.profile.extract import extract_in_background
 from . import service, registry
 
 router = APIRouter()
@@ -29,8 +30,14 @@ def tools():
 
 
 @router.post("/plan")
-def plan(body: PlanIn, db: Session = Depends(get_db)):
-    return service.plan(db, [{"role": m.role, "content": m.content} for m in body.messages])
+def plan(body: PlanIn, background: BackgroundTasks, db: Session = Depends(get_db)):
+    msgs = [{"role": m.role, "content": m.content} for m in body.messages]
+    result = service.plan(db, msgs)
+    last_user = next((m["content"] for m in reversed(msgs) if m["role"] == "user"), "")
+    assistant_text = result.get("text") or result.get("ack") or ""
+    if last_user and assistant_text:
+        background.add_task(extract_in_background, last_user, assistant_text)
+    return result
 
 
 @router.post("/run")

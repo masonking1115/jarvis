@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,7 @@ from backend.modules.tasks.models import Task
 from backend.modules.goals.models import Goal
 from backend.modules.finance.models import Asset, Liability, Transaction
 from backend.modules.profile import storage as profile_storage
+from backend.modules.profile.extract import extract_in_background
 
 
 router = APIRouter()
@@ -110,7 +111,7 @@ def _build_context(db: Session) -> str:
 
 
 @router.post("", response_model=ChatResponse)
-def chat(req: ChatRequest, db: Session = Depends(get_db)):
+def chat(req: ChatRequest, background: BackgroundTasks, db: Session = Depends(get_db)):
     provider = get_provider(req.provider)
     context = _build_context(db)
     system = f"{load_persona()}\n\n{context}"
@@ -121,6 +122,9 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
     # Voice replies use a faster model (lower latency); typed chat keeps the default.
     model = settings.voice_model if req.voice else None
     reply = provider.chat(system=system, messages=msgs, model=model)
+    last_user = next((m.content for m in reversed(req.messages) if m.role == "user"), "")
+    if last_user and reply:
+        background.add_task(extract_in_background, last_user, reply)
     return ChatResponse(reply=reply, provider=provider.name)
 
 
