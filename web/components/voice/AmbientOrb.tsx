@@ -31,27 +31,26 @@ export function AmbientOrb() {
   }, [levelRef]);
 
   return (
-    <div
-      className="pointer-events-none fixed bottom-5 z-[5]"
+    // The fixed wrapper IS the click target — one solid circular button the exact
+    // size of the orb. Everything inside is purely visual (pointer-events-none), so
+    // nothing can shadow the center. rounded-full keeps the corners click-through.
+    <button
+      type="button"
+      aria-label="Open chat with Jarvis"
+      onClick={() => setOpen(true)}
+      className="fixed bottom-5 z-[5] cursor-pointer rounded-full border-0 bg-transparent p-0"
       style={{
+        width: ORB, height: ORB,
         left: active ? "50%" : `calc(100% - ${ORB / 2 + 20}px)`,
         transform: "translateX(-50%)",
         opacity: active ? 0.95 : 0.5,
         transition: "left 700ms cubic-bezier(.4,0,.2,1), opacity 500ms ease",
       }}
     >
-      <div ref={scaleRef} className="relative" style={{ transition: "transform 80ms linear", willChange: "transform" }}>
+      <div ref={scaleRef} className="pointer-events-none"
+           style={{ transition: "transform 80ms linear", willChange: "transform" }}>
         <JarvisOrb className="block w-[230px] h-[230px]" />
-        {/* Circular click target that exactly overlays the orb (absolute inset-0 of the
-            same box). pointer-events-auto re-enables clicks inside the pointer-events-none
-            wrapper; rounded-full keeps the transparent corners click-through to the UI. */}
-        <button
-          type="button"
-          aria-label="Open chat with Jarvis"
-          onClick={() => setOpen(true)}
-          className="pointer-events-auto absolute inset-0 cursor-pointer rounded-full border-0 bg-transparent p-0"
-        />
       </div>
-    </div>
+    </button>
   );
 }
