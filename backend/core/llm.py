@@ -1,8 +1,10 @@
 """LLM provider abstraction. Supports Anthropic and OpenAI, picked at runtime."""
 from __future__ import annotations
 
+import subprocess
 from typing import Protocol
 from .config import settings
+from .stream_parse import parse_stream_lines
 
 
 class LLMProvider(Protocol):
@@ -94,7 +96,7 @@ class ClaudeCliProvider:
         """One-shot web search via the CLI's WebSearch/WebFetch tools (no API key)."""
         if not self.available:
             raise RuntimeError("claude CLI not found on PATH")
-        import os, subprocess, tempfile
+        import os, tempfile
         env = {k: v for k, v in os.environ.items()
                if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
         prompt = ("Search the web and answer for spoken delivery — 2-3 sentences, "
@@ -113,6 +115,65 @@ class ClaudeCliProvider:
         out = re.split(r"\n\s*sources?\s*:", out, flags=re.I)[0].strip()  # drop trailing sources block
         out = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", out)                # [text](url) -> text
         return out.strip()
+
+    def _project_cwd(self) -> str:
+        # Run in the project root so the agent has the codebase + local data and
+        # uses TodoWrite naturally (loads the project CLAUDE.md — intended).
+        import os
+        return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    def agent_text(self, prompt: str, context: str = "", model: str | None = None,
+                   timeout: int = 180) -> str:
+        """Non-streaming autonomous agent run (used by voice). Full toolset, no gates."""
+        if not self.available:
+            raise RuntimeError("claude CLI not found on PATH")
+        import os
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
+        cmd = [self.path, "-p", prompt, "--output-format", "text",
+               "--permission-mode", "bypassPermissions",
+               "--model", (model or self.model)]
+        if context:
+            cmd[3:3] = ["--append-system-prompt", context]
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            env=env, cwd=self._project_cwd(), timeout=timeout,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"agent run failed ({proc.returncode}): {proc.stderr[:300]}")
+        return proc.stdout.strip().replace("&#65533;", "-")
+
+    def agent_stream(self, prompt: str, context: str = "", model: str | None = None,
+                     timeout: int = 300):
+        """Streaming autonomous agent run (used by chat). Yields normalized events."""
+        if not self.available:
+            yield {"type": "text", "text": "The agent is unavailable, sir."}
+            yield {"type": "done", "text": ""}
+            return
+        import os
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
+        cmd = [self.path, "-p", prompt,
+               "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+               "--permission-mode", "bypassPermissions",
+               "--model", (model or self.model)]
+        if context:
+            cmd[3:3] = ["--append-system-prompt", context]
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, encoding="utf-8", errors="replace",
+            env=env, cwd=self._project_cwd(),
+        )
+        try:
+            yield from parse_stream_lines(proc.stdout)
+        except Exception:  # noqa: BLE001 — never leak; close cleanly
+            yield {"type": "text", "text": "I ran into a problem with that, sir."}
+            yield {"type": "done", "text": ""}
+        finally:
+            try:
+                proc.kill()
+            except Exception:  # noqa: BLE001
+                pass
 
 
 class StubProvider:
