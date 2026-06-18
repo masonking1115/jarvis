@@ -17,12 +17,16 @@ _PLAN_INSTRUCTION = (
     "Respond with ONLY a JSON object — no prose, no code fences:\n"
     '- Plain answer: {"kind":"reply","text":"<concise spoken answer>"}\n'
     '- Action: {"kind":"action","tool":"<one of the action names>","args":{...},'
-    '"ack":"<short spoken acknowledgement, e.g. \'Yes sir, performing the weather search now.\'>"}\n'
+    '"ack":"<short spoken acknowledgement>"}\n'
     '- Specialized skill: {"kind":"skill","name":"<one of the skill names>"}\n'
-    "Prefer a skill when the request matches its description; use an action when it matches one; "
-    "otherwise reply. If the user explicitly names a skill, use that skill.\n"
-    "Be proactive: when the user's known facts and goals are relevant, connect them to the moment "
-    "and suggest or take the next concrete step toward a goal (confirming anything irreversible first)."
+    '- Escalate: {"kind":"escalate","reason":"<why>"} — use when the request needs '
+    "multiple steps, reading files or the user's own data, web research plus synthesis, "
+    "or deep analysis a single reply can't do well.\n"
+    "Prefer a skill when the request matches its description; an action when it matches one; "
+    "escalate for genuinely hard/multi-step work; otherwise reply. If the user explicitly "
+    "names a skill, use that skill.\n"
+    "Be proactive: connect the user's known facts and goals to the moment and suggest or take "
+    "the next concrete step toward a goal (confirming anything irreversible first)."
 )
 
 
@@ -38,18 +42,35 @@ def _parse(raw: str) -> dict:
     if i != -1 and j != -1 and j > i:
         try:
             obj = json.loads(s[i:j + 1])
-            if isinstance(obj, dict) and obj.get("kind") in ("reply", "action", "skill"):
+            if isinstance(obj, dict) and obj.get("kind") in ("reply", "action", "skill", "escalate"):
                 return obj
         except Exception:  # noqa: BLE001
             pass
     return {"kind": "reply", "text": (raw or "").strip() or "I'm not sure, sir."}
 
 
-def plan(db: Session, messages: list[dict], skill: str | None = None) -> dict:
+def _smart_answer(db: Session, messages: list[dict]) -> dict:
+    from backend.modules.skills import service as skills_service
+    provider = get_provider()
+    facts = profile_storage.get_context(db)
+    system = load_persona()
+    if facts:
+        system += "\n\n" + facts
+    system += "\n\n" + skills_service.router_context(db)
+    text = provider.chat(system=system, messages=messages, model=settings.smart_model)
+    return {"kind": "reply", "text": (text or "").strip() or "I'm not sure, sir."}
+
+
+def plan(db: Session, messages: list[dict], skill: str | None = None,
+         tier: str | None = None) -> dict:
     # Lazy import avoids an import cycle (skills.service imports agent.service._parse).
     from backend.modules.skills import service as skills_service
     if skill:
         return skills_service.answer(db, skill, messages)
+    if tier == "agent":
+        return {"kind": "escalate", "reason": "forced agent tier"}
+    if tier == "smart":
+        return _smart_answer(db, messages)
 
     provider = get_provider()
     facts = profile_storage.get_context(db)
@@ -67,7 +88,7 @@ def plan(db: Session, messages: list[dict], skill: str | None = None) -> dict:
         return {"kind": "reply", "text": "I'm not sure how to help with that, sir."}
     if out.get("kind") == "action" and out.get("tool") not in registry.NAMES:
         return {"kind": "reply", "text": out.get("ack") or "I can't do that yet, sir."}
-    return out
+    return out  # reply | action | escalate
 
 
 def _weather_line(db: Session, location: str | None) -> str:
