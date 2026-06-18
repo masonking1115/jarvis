@@ -201,9 +201,11 @@ export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }
           border: "1px solid rgba(74, 214, 255, 0.35)",
           boxShadow: "inset 0 0 60px rgba(74, 214, 255, 0.10), 0 0 30px rgba(74, 214, 255, 0.15)",
         }} />
-      {/* JARVIS hero orb (rings + breathing core + wordmark), bottom-right — its core clicks through to the dashboard */}
+      {/* JARVIS hero orb (rings + breathing core + wordmark), bottom-right — its core clicks through to the dashboard.
+          Only wire the click while the flyover is OPEN: JarvisOrb's hit-circle uses inline pointer-events:all, which
+          would otherwise pierce this closed (pointer-events-none) layer and steal clicks from the ambient orb below. */}
       <div className="pointer-events-none absolute bottom-2 right-2">
-        <JarvisOrb className="w-[300px] h-[300px]" onOrbClick={goDashboard} />
+        <JarvisOrb className="w-[300px] h-[300px]" onOrbClick={open ? goDashboard : undefined} />
       </div>
       {/* HUD */}
       <div className="absolute top-4 left-4 panel !bg-jarvis-panel/70 backdrop-blur px-4 py-3 max-w-xs">

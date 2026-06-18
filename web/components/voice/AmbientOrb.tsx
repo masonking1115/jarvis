@@ -38,7 +38,7 @@ export function AmbientOrb() {
       type="button"
       aria-label="Open chat with Jarvis"
       onClick={() => setOpen(true)}
-      className="fixed bottom-5 z-[5] cursor-pointer rounded-full border-0 bg-transparent p-0"
+      className="fixed bottom-5 z-[30] cursor-pointer rounded-full border-0 bg-transparent p-0 [&_*]:pointer-events-none"
       style={{
         width: ORB, height: ORB,
         left: active ? "50%" : `calc(100% - ${ORB / 2 + 20}px)`,
