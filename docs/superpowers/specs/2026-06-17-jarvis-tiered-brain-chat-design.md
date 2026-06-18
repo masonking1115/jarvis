@@ -39,8 +39,13 @@ no persistence, and no slash commands.
   Todos and tool chips are the agent's actual ones — not synthesized.
 - **Persistence:** one persistent thread (survives reloads), stored in SQLite.
   `/compact` summarizes it in place and continues.
-- **Voice + chat:** tiering applies to voice too; on escalate, voice speaks an
-  immediate ack, runs the agent, then speaks a concise summary.
+- **Voice + chat:** tiering applies to voice too.
+- **Non-blocking escalation (interaction-model pattern):** on escalate the agent
+  runs as a **tracked background task** while the fast/interaction layer stays
+  live — voice keeps listening and answers follow-ups; the agent's result is
+  **woven in at the next natural pause**, not as a blocking freeze. Chat keeps
+  the input unlocked while the agent streams. The agent is handed the **full
+  conversation** as its context package.
 - **Full autonomy:** the agent tier runs with **no permission gates** — it has
   the full Claude Code toolset and executes tasks end-to-end without ever
   stopping to ask the user (the user durably authorizes this for their own local
@@ -65,8 +70,22 @@ no persistence, and no slash commands.
 
  persistence: ChatTurn rows (one thread) + ChatState (tier, brainstorm mode, compaction summary)
  endpoints:  GET /api/chat/thread · POST /api/chat/stream (SSE) · POST /api/chat/compact
+             POST /api/chat/agent + GET /api/chat/agent/{job_id} (voice background job)
              (existing POST /api/chat kept for voice/back-compat)
 ```
+
+## Design influence — Interaction Models (Thinking Machines)
+
+This design follows the two-tier pattern in Thinking Machines Lab's *Interaction
+Models* (fast interaction layer + asynchronous background agent). What we adopt:
+non-blocking handoff (the fast layer stays present, results stream/weave in at a
+natural moment, not as an "abrupt context switch"), passing the **full
+conversation** as the background context package, and aggressive context
+management for long sessions (our `/compact`). What we deliberately do **not**
+adopt: their proprietary interaction-model internals (200ms interleaved
+micro-turns, sub-second native turn-taking, encoder-free early fusion, a custom
+276B-MoE model). Our interaction layer is the fast Sonnet planner + browser
+STT/TTS, which is sufficient for a local personal assistant.
 
 ## Component 1 — Tier dispatcher (`agent/service.plan`)
 
@@ -187,6 +206,12 @@ Keep `POST /api/chat` (voice/back-compat) and `/briefing` unchanged. Add:
        forwarding each normalized event as an SSE event.
   5. Persist the assembled assistant text (and final todos) as one `ChatTurn`.
   - SSE framing: each event is `data: <json>\n\n`; types `text|tool|todos|action|done|error`.
+- **`POST /api/chat/agent`** (voice background job) → body `{text}`; starts an
+  `agent_text(...)` run over the full conversation in a background task, returns
+  `{job_id}` immediately. **`GET /api/chat/agent/{job_id}`** → `{status:
+  "running"|"done"|"error", text?}`. This is the non-blocking path the voice
+  client uses so it can keep listening while the agent works (Component 7). One
+  job at a time; jobs are kept in an in-process dict (local single-user app).
 - **`POST /api/chat/compact`** → summarize the current thread with the fast
   provider ("Summarize this conversation so it can continue with full context:
   open threads, decisions, the user's goals/preferences surfaced, and any
@@ -237,14 +262,26 @@ and ends by streaming a concise spec the user can copy.
 
 ## Component 7 — Voice escalation (`VoiceProvider` + voice path)
 
+Non-blocking, per the interaction-model pattern — voice never freezes while the
+agent works.
+
 - The voice planner already calls `plan`. When it returns `escalate` (or the user
   said a "think hard"/"go deep" phrase that forces `tier="agent"`):
-  - speak an immediate ack: "Let me think on that, sir."
-  - call `agent_text(...)` (non-streaming) to get the final answer.
-  - speak a concise spoken-form summary (reuse the voice brevity instruction:
-    2–3 sentences, no markdown).
+  - speak an immediate ack: "Let me think on that, sir — I'll keep going while I do."
+  - start the agent run **as a background task** (a `POST /api/chat/agent` that
+    runs `agent_text(...)` with the full conversation and returns a `job_id`; the
+    client polls `GET /api/chat/agent/{job_id}` or reuses the SSE channel). The
+    voice state machine stays in normal listen/respond mode meanwhile.
+  - while it runs, the user can keep talking; the fast tier answers follow-ups.
+  - when the job completes, **deliver the result at the next natural pause** —
+    i.e. only when the state machine is idle/listening (not `capturing` or
+    `speaking`); queue it and speak it then, prefixed so it's clearly the
+    delayed answer ("Sir — about your finances: …"). Spoken-form brevity applies
+    (2–3 sentences, no markdown).
 - The phrase detection lives where commands are parsed; a small set
   (`"think hard"`, `"go deep"`, `"really think"`) forces the agent tier.
+- A single background job at a time (no coordination of concurrent agents — a new
+  forced-agent request supersedes/queues, it does not run in parallel).
 - Everything else in the voice state machine is unchanged.
 
 ## Error handling & privacy
@@ -298,7 +335,7 @@ each slash command + a voice escalation).
 - `backend/core/llm.py` — `AnthropicProvider.chat` honors model override; `ClaudeCliProvider.agent_text` + `agent_stream` (+ pure line parser)
 - `backend/modules/agent/service.py` — `plan(..., tier=None)`, `escalate` kind, `_smart_answer`
 - `backend/modules/agent/router.py` — `PlanIn` gains optional `tier`
-- `backend/modules/chat/router.py` — `/thread`, `/stream` (SSE), `/compact`, `/model`, `/mode`
+- `backend/modules/chat/router.py` — `/thread`, `/stream` (SSE), `/compact`, `/model`, `/mode`, `/agent` + `/agent/{job_id}` (voice background job)
 - `web/lib/api.ts` — `chat` client (thread/stream/compact/model/mode) + types
 - `web/app/(console)/chat/page.tsx` — rebuilt streaming + todo + slash UI
 - `web/components/voice/VoiceProvider.tsx` (+ `web/lib/voice.ts`) — "think hard" phrase + escalate handling/ack
@@ -317,6 +354,13 @@ each slash command + a voice escalation).
 
 - Optional per-action approval / a "careful mode" toggle (intentionally omitted
   now — the agent runs fully autonomous per the user's authorization).
+- **Mid-run interruption / steering / abort** of a background agent task when new
+  user input arrives — even Thinking Machines flags this as an open problem
+  ("mechanisms for aborting slow background tasks"). v1 lets a run finish (one
+  job at a time); steering is a fast-follow.
+- The interaction-model **internals** themselves (sub-second micro-turn streaming,
+  native turn detection, a custom multimodal model) — out of reach without a
+  bespoke model; our fast planner + browser STT/TTS stands in.
 - Multiple named chat threads (one persistent thread for now).
 - Token-level streaming for the smart/fast API tiers (block-as-one-event is fine
   initially; can add real API streaming later).
