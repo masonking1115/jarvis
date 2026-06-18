@@ -1,13 +1,15 @@
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
 from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.core.db import get_db
+from backend.core.db import get_db, SessionLocal
 from backend.core.config import settings
-from backend.core.llm import get_provider
+from backend.core.llm import get_provider, ClaudeCliProvider
 from backend.modules.tasks.models import Task
 from backend.modules.goals.models import Goal
 from backend.modules.finance.models import Asset, Liability, Transaction
@@ -18,6 +20,33 @@ from backend.modules.chat.models import get_state
 
 
 router = APIRouter()
+
+# Lazy reference to agent.service — imported at request time to avoid a circular
+# import (agent.service imports load_persona from this module at its top level).
+# Exposed as a module attribute so tests can monkeypatch it: cr.service.plan.
+class _LazyService:
+    """Proxy for backend.modules.agent.service, resolved on first attribute access."""
+    _mod = None
+
+    def __getattr__(self, name):
+        if self._mod is None:
+            import importlib
+            object.__setattr__(self, "_mod",
+                               importlib.import_module("backend.modules.agent.service"))
+        return getattr(self._mod, name)
+
+    def __setattr__(self, name, value):
+        if name == "_mod":
+            object.__setattr__(self, name, value)
+        else:
+            if self._mod is None:
+                import importlib
+                object.__setattr__(self, "_mod",
+                                   importlib.import_module("backend.modules.agent.service"))
+            setattr(self._mod, name, value)
+
+
+service = _LazyService()
 
 
 class ChatMessage(BaseModel):
@@ -201,3 +230,63 @@ def compact(db: Session = Depends(get_db)):
     summary = _summarize(store.thread_messages(db)) or "(nothing to summarize yet)"
     store.compact(db, summary)
     return {"summary": summary}
+
+
+class StreamIn(BaseModel):
+    text: str
+    tier: str | None = None   # overrides the sticky tier for this message
+
+
+def _agent_stream(prompt: str, context: str = "", **kw):
+    """Indirection so tests can monkeypatch the CLI streaming call."""
+    yield from ClaudeCliProvider().agent_stream(prompt, context=context)
+
+
+def _sse(event: dict) -> str:
+    return f"data: {json.dumps(event)}\n\n"
+
+
+@router.post("/stream")
+def stream(body: StreamIn):
+    # Own session: a StreamingResponse outlives the request scope, so we manage it here.
+    def gen():
+        db = SessionLocal()
+        try:
+            store.add_turn(db, "user", body.text)
+            state = get_state(db)
+            tier = body.tier or state.tier
+            msgs = store.thread_messages(db)
+            result = service.plan(db, msgs, tier=tier)
+            kind = result.get("kind")
+            assistant_text = ""
+            todos = None
+
+            if kind == "escalate" or tier == "agent":
+                prompt = "\n\n".join(f"{m['role']}: {m['content']}" for m in msgs)
+                context = f"{load_persona()}\n\n{_build_context(db)}"
+                for ev in _agent_stream(prompt, context=context):
+                    if ev["type"] == "text":
+                        assistant_text += ev["text"]
+                    elif ev["type"] == "todos":
+                        todos = ev["todos"]
+                    yield _sse(ev)
+            elif kind == "action":
+                out = service.run(db, result["tool"], result.get("args"))
+                assistant_text = out.get("text", "")
+                # let the UI optionally surface the action it ran
+                yield _sse({"type": "action", "name": result["tool"]})
+                yield _sse({"type": "text", "text": assistant_text})
+                yield _sse({"type": "done", "text": assistant_text})
+            else:  # reply (and skill, which returns reply/action already resolved)
+                assistant_text = result.get("text", "") or result.get("ack", "")
+                yield _sse({"type": "text", "text": assistant_text})
+                yield _sse({"type": "done", "text": assistant_text})
+
+            store.add_turn(db, "assistant", assistant_text, tier=tier)
+        except Exception:  # noqa: BLE001 — never leak; close the stream cleanly
+            yield _sse({"type": "error", "text": "I ran into a problem with that, sir."})
+            yield _sse({"type": "done", "text": ""})
+        finally:
+            db.close()
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
