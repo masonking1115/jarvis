@@ -2,6 +2,7 @@
 import { useEffect, useRef } from "react";
 import { JarvisOrb } from "@/components/JarvisOrb";
 import { useVoice } from "./VoiceProvider";
+import { useChatLauncher } from "@/components/chat/ChatLauncher";
 
 const ORB = 230;                 // px — keep in sync with the w-/h- class below
 
@@ -10,6 +11,7 @@ const ORB = 230;                 // px — keep in sync with the w-/h- class bel
 // pulse with the live audio level (your voice, and JARVIS's while speaking).
 export function AmbientOrb() {
   const { state, levelRef } = useVoice();
+  const { setOpen } = useChatLauncher();
   const scaleRef = useRef<HTMLDivElement | null>(null);
   const active = state === "capturing" || state === "thinking" || state === "speaking";
 
@@ -39,7 +41,7 @@ export function AmbientOrb() {
       }}
     >
       <div ref={scaleRef} style={{ transition: "transform 80ms linear", willChange: "transform" }}>
-        <JarvisOrb className="w-[230px] h-[230px]" />
+        <JarvisOrb className="w-[230px] h-[230px]" onOrbClick={() => setOpen(true)} />
       </div>
     </div>
   );
