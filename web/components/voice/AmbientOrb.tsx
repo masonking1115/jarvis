@@ -41,7 +41,17 @@ export function AmbientOrb() {
       }}
     >
       <div ref={scaleRef} style={{ transition: "transform 80ms linear", willChange: "transform" }}>
-        <JarvisOrb className="w-[230px] h-[230px]" onOrbClick={() => setOpen(true)} />
+        {/* The whole sphere is the click target (re-enables pointer events inside the
+            pointer-events-none wrapper). rounded-full keeps the hit area circular so
+            the transparent corners still pass clicks through to the UI behind. */}
+        <button
+          type="button"
+          aria-label="Open chat with Jarvis"
+          onClick={() => setOpen(true)}
+          className="pointer-events-auto block cursor-pointer rounded-full border-0 bg-transparent p-0"
+        >
+          <JarvisOrb className="w-[230px] h-[230px]" />
+        </button>
       </div>
     </div>
   );
