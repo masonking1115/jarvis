@@ -40,18 +40,17 @@ export function AmbientOrb() {
         transition: "left 700ms cubic-bezier(.4,0,.2,1), opacity 500ms ease",
       }}
     >
-      <div ref={scaleRef} style={{ transition: "transform 80ms linear", willChange: "transform" }}>
-        {/* The whole sphere is the click target (re-enables pointer events inside the
-            pointer-events-none wrapper). rounded-full keeps the hit area circular so
-            the transparent corners still pass clicks through to the UI behind. */}
+      <div ref={scaleRef} className="relative" style={{ transition: "transform 80ms linear", willChange: "transform" }}>
+        <JarvisOrb className="block w-[230px] h-[230px]" />
+        {/* Circular click target that exactly overlays the orb (absolute inset-0 of the
+            same box). pointer-events-auto re-enables clicks inside the pointer-events-none
+            wrapper; rounded-full keeps the transparent corners click-through to the UI. */}
         <button
           type="button"
           aria-label="Open chat with Jarvis"
           onClick={() => setOpen(true)}
-          className="pointer-events-auto block cursor-pointer rounded-full border-0 bg-transparent p-0"
-        >
-          <JarvisOrb className="w-[230px] h-[230px]" />
-        </button>
+          className="pointer-events-auto absolute inset-0 cursor-pointer rounded-full border-0 bg-transparent p-0"
+        />
       </div>
     </div>
   );
