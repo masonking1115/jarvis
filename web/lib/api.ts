@@ -1,3 +1,6 @@
+import type { ChatEvent } from "./sseParse";
+import { parseSseChunk } from "./sseParse";
+
 // Thin fetch wrapper. The Next.js dev server proxies /api/* to FastAPI on :8000.
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -337,4 +340,33 @@ export const flyover = {
   setLocation: (address: string) =>
     api.post<{ ok: boolean; reason?: string; address?: string; lat?: number; lng?: number }>(
       "/api/flyover/location", { address }),
+};
+
+export type ChatTurn = { role: "user" | "assistant"; content: string; tier: string | null };
+export type ChatThread = { messages: ChatTurn[]; tier: string; mode: string };
+
+export const chat = {
+  thread:  ()                 => api.get<ChatThread>("/api/chat/thread"),
+  setTier: (tier: string)     => api.post<{ tier: string }>("/api/chat/model", { tier }),
+  setMode: (mode: string)     => api.post<{ mode: string }>("/api/chat/mode", { mode }),
+  compact: ()                 => api.post<{ summary: string }>("/api/chat/compact", {}),
+  // Stream a message; calls onEvent for each parsed ChatEvent until "done".
+  async stream(text: string, tier: string | undefined, onEvent: (e: ChatEvent) => void): Promise<void> {
+    const res = await fetch("/api/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, tier }),
+    });
+    if (!res.body) throw new Error("no stream body");
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const { events, rest } = parseSseChunk(buffer, decoder.decode(value, { stream: true }));
+      buffer = rest;
+      for (const e of events) onEvent(e);
+    }
+  },
 };
