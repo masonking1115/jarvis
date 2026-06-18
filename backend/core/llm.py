@@ -14,6 +14,13 @@ class LLMProvider(Protocol):
 
 class AnthropicProvider:
     name = "anthropic"
+    # App-wide model settings use CLI aliases (e.g. voice_model="haiku"); the API
+    # needs full model ids. Map aliases through; full ids pass unchanged.
+    _ALIASES = {
+        "haiku": "claude-haiku-4-5-20251001",
+        "sonnet": "claude-sonnet-4-6",
+        "opus": "claude-opus-4-8",
+    }
 
     def __init__(self) -> None:
         from anthropic import Anthropic
@@ -21,8 +28,10 @@ class AnthropicProvider:
         self.model = settings.anthropic_model
 
     def chat(self, system: str, messages: list[dict], model: str | None = None) -> str:
+        chosen = model or self.model      # honor override (smart tier = Opus); default Sonnet
+        chosen = self._ALIASES.get(chosen, chosen)   # CLI alias -> API model id
         resp = self.client.messages.create(
-            model=model or self.model,   # honor override (smart tier = Opus); default Sonnet
+            model=chosen,
             max_tokens=1024,
             system=system,
             messages=messages,
