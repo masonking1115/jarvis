@@ -20,7 +20,7 @@ class AnthropicProvider:
 
     def chat(self, system: str, messages: list[dict], model: str | None = None) -> str:
         resp = self.client.messages.create(
-            model=self.model,   # API model ids differ from CLI aliases; ignore override
+            model=model or self.model,   # honor override (smart tier = Opus); default Sonnet
             max_tokens=1024,
             system=system,
             messages=messages,
