@@ -680,7 +680,7 @@ git commit -m "feat(chat): api client (thread/stream/compact/setTier/setMode)"
 
 ---
 
-### Task 7: Rebuild the chat page (streaming + todos + slash commands)
+### Task 7: Rebuild the chat page (streaming + todos + slash commands) — SUPERSEDED by Task 7R below (orb-launched translucent overlay). Skip this; implement Task 7R instead.
 
 **Files:**
 - Modify: `web/app/(console)/chat/page.tsx` (full rebuild)
@@ -850,6 +850,273 @@ Expected: clean.
 git add web/app/(console)/chat/page.tsx
 git commit -m "feat(chat): Claude-Code-style page — streaming, todo panel, slash menu"
 ```
+
+---
+
+### Task 7R: Orb-launched translucent chat overlay (replaces Task 7)
+
+The chat lives in a reusable `ChatPanel`. Clicking the existing bottom-right JARVIS orb opens it as a **centered, see-through, futuristic overlay** that ties into the UI (accent `#4ad6ff`, glass/backdrop-blur). Mounted globally so it works on every tab. The `/chat` route renders the same panel inline.
+
+**Files:**
+- Create: `web/components/chat/ChatPanel.tsx`
+- Create: `web/components/chat/ChatLauncher.tsx` (context provider + overlay)
+- Modify: `web/components/voice/AmbientOrb.tsx` (orb click opens the launcher)
+- Modify: `web/app/(console)/layout.tsx` (wrap with provider + mount overlay)
+- Modify: `web/app/(console)/chat/page.tsx` (render `ChatPanel` inline)
+
+- [ ] **Step 1: Create `web/components/chat/ChatPanel.tsx`**
+
+```tsx
+"use client";
+import { useEffect, useRef, useState } from "react";
+import { chat, ChatTurn } from "@/lib/api";
+import type { ChatEvent } from "@/lib/sseParse";
+
+type Todo = { content: string; status: string };
+const TIERS = ["fast", "smart", "agent"] as const;
+const SLASH = [
+  { cmd: "/model", help: "switch brain: /model fast|smart|agent" },
+  { cmd: "/compact", help: "summarize the conversation to save context" },
+  { cmd: "/brainstorm", help: "guided design Q&A (one question at a time)" },
+  { cmd: "/help", help: "show commands" },
+];
+const todoIcon = (s: string) => (s === "completed" ? "✓" : s === "in_progress" ? "◐" : "○");
+
+export function ChatPanel({ onClose }: { onClose?: () => void }) {
+  const [messages, setMessages] = useState<ChatTurn[]>([]);
+  const [tier, setTier] = useState("fast");
+  const [mode, setMode] = useState("");
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [streaming, setStreaming] = useState("");
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [tools, setTools] = useState<string[]>([]);
+  const [note, setNote] = useState("");
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { chat.thread().then(t => { setMessages(t.messages); setTier(t.tier); setMode(t.mode); }); }, []);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, streaming, todos]);
+
+  const showSlash = input.startsWith("/") && !input.includes(" ");
+
+  async function runSlash(raw: string): Promise<boolean> {
+    const [cmd, arg] = raw.trim().split(/\s+/, 2);
+    if (cmd === "/help") { setNote(SLASH.map(s => `${s.cmd} — ${s.help}`).join("\n")); return true; }
+    if (cmd === "/model") {
+      if (!TIERS.includes(arg as any)) { setNote(`Current brain: ${tier}. Use /model fast|smart|agent.`); return true; }
+      await chat.setTier(arg); setTier(arg); setNote(`Brain set to ${arg}.`); return true;
+    }
+    if (cmd === "/compact") { setNote("Compacting…"); const { summary } = await chat.compact(); setMessages([]); setNote(`Context compacted: ${summary}`); return true; }
+    if (cmd === "/brainstorm") { await chat.setMode("brainstorm"); setMode("brainstorm"); setNote("Brainstorm mode on — I'll ask one question at a time. Type /exit to leave."); return true; }
+    if (cmd === "/exit") { await chat.setMode(""); setMode(""); setNote("Brainstorm mode off."); return true; }
+    return false;
+  }
+
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    const text = input.trim();
+    if (!text || busy) return;
+    setInput("");
+    if (text.startsWith("/")) { if (await runSlash(text)) return; }
+    setNote("");
+    setMessages(m => [...m, { role: "user", content: text, tier: null }]);
+    setBusy(true); setStreaming(""); setTodos([]); setTools([]);
+    let acc = "";
+    const onEvent = (ev: ChatEvent) => {
+      if (ev.type === "text") { acc += ev.text; setStreaming(acc); }
+      else if (ev.type === "todos") setTodos(ev.todos);
+      else if (ev.type === "tool") setTools(t => [...t, ev.summary]);
+      else if (ev.type === "error") { acc += ev.text; setStreaming(acc); }
+    };
+    try {
+      await chat.stream(text, tier, onEvent);
+      setMessages(m => [...m, { role: "assistant", content: acc, tier }]);
+    } catch (err: any) {
+      setMessages(m => [...m, { role: "assistant", content: `Error: ${err.message}`, tier }]);
+    } finally { setBusy(false); setStreaming(""); setTodos([]); setTools([]); }
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#4ad6ff]/15">
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-[#4ad6ff] shadow-[0_0_10px_#4ad6ff]" />
+          <span className="font-semibold tracking-wide">JARVIS</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          {mode === "brainstorm" && <span className="px-2 py-1 rounded-full bg-white/10">brainstorm</span>}
+          <span className="px-2 py-1 rounded-full bg-[#4ad6ff]/15 text-[#9fe6ff] uppercase tracking-wide">{tier}</span>
+          {onClose && <button onClick={onClose} className="ml-1 text-jarvis-muted hover:text-white text-lg leading-none">×</button>}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+        {messages.length === 0 && !streaming && (
+          <div className="text-sm text-jarvis-muted">
+            How can I help, sir? Type <span className="text-[#4ad6ff]">/</span> for commands, or <span className="text-[#4ad6ff]">/model agent</span> to let me work autonomously.
+          </div>
+        )}
+        {messages.map((m, i) => (
+          <div key={i} className={`text-sm ${m.role === "user" ? "text-right" : ""}`}>
+            <div className={`inline-block px-3 py-2 rounded-2xl max-w-[85%] whitespace-pre-wrap ${m.role === "user" ? "bg-[#4ad6ff]/20 text-white" : "bg-white/5"}`}>{m.content}</div>
+          </div>
+        ))}
+        {(streaming || todos.length > 0 || tools.length > 0) && (
+          <div className="text-sm space-y-2">
+            {todos.length > 0 && (
+              <div className="rounded-xl border border-[#4ad6ff]/20 bg-white/5 p-3 space-y-1">
+                <div className="text-xs uppercase tracking-wide text-jarvis-muted">Working</div>
+                {todos.map((t, i) => (
+                  <div key={i} className={t.status === "completed" ? "line-through text-jarvis-muted" : ""}>{todoIcon(t.status)} {t.content}</div>
+                ))}
+              </div>
+            )}
+            {tools.map((t, i) => (<div key={i} className="text-xs text-jarvis-muted">⛭ {t}</div>))}
+            {streaming && (<div className="inline-block px-3 py-2 rounded-2xl max-w-[85%] whitespace-pre-wrap bg-white/5">{streaming}<span className="animate-pulse">▋</span></div>)}
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {note && <div className="px-4 pb-2 text-xs text-jarvis-muted whitespace-pre-wrap">{note}</div>}
+
+      <div className="relative px-3 pb-3">
+        {showSlash && (
+          <div className="absolute bottom-full mb-1 left-3 right-3 rounded-xl border border-[#4ad6ff]/20 bg-[#070d1a]/95 backdrop-blur-xl p-1 text-sm">
+            {SLASH.filter(s => s.cmd.startsWith(input)).map(s => (
+              <button key={s.cmd} type="button" onClick={() => setInput(s.cmd + " ")} className="block w-full text-left px-2 py-1 rounded hover:bg-white/10">
+                <span className="text-[#4ad6ff]">{s.cmd}</span> <span className="text-jarvis-muted">— {s.help}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <form onSubmit={send} className="flex gap-2">
+          <input className="flex-1 rounded-xl bg-white/5 border border-[#4ad6ff]/20 px-3 py-2 outline-none focus:border-[#4ad6ff]/50 placeholder:text-jarvis-muted" placeholder="Ask Jarvis…  (/ for commands)" value={input} onChange={e => setInput(e.target.value)} autoFocus />
+          <button className="btn" disabled={busy}>{busy ? "…" : "Send"}</button>
+        </form>
+      </div>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 2: Create `web/components/chat/ChatLauncher.tsx`**
+
+```tsx
+"use client";
+import { createContext, useContext, useEffect, useState } from "react";
+import { ChatPanel } from "./ChatPanel";
+
+const Ctx = createContext<{ open: boolean; setOpen: (v: boolean) => void }>({ open: false, setOpen: () => {} });
+export const useChatLauncher = () => useContext(Ctx);
+
+export function ChatLauncherProvider({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return <Ctx.Provider value={{ open, setOpen }}>{children}</Ctx.Provider>;
+}
+
+export function ChatOverlay() {
+  const { open, setOpen } = useChatLauncher();
+  const [shown, setShown] = useState(false);
+
+  useEffect(() => {
+    if (!open) { setShown(false); return; }
+    const id = requestAnimationFrame(() => setShown(true));
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => { cancelAnimationFrame(id); window.removeEventListener("keydown", onKey); };
+  }, [open, setOpen]);
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[40] flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+      <div className="absolute inset-0 bg-[#040810]/50 backdrop-blur-md"
+           style={{ opacity: shown ? 1 : 0, transition: "opacity 200ms ease" }} />
+      <div
+        onClick={e => e.stopPropagation()}
+        className="relative w-[min(94vw,760px)] h-[min(82vh,720px)] rounded-2xl border border-[#4ad6ff]/30 bg-[#070d1a]/70 backdrop-blur-2xl shadow-[0_0_80px_rgba(74,214,255,0.18)] overflow-hidden"
+        style={{ transform: shown ? "scale(1)" : "scale(0.92)", opacity: shown ? 1 : 0, transformOrigin: "bottom right", transition: "transform 220ms cubic-bezier(.2,.8,.2,1), opacity 200ms ease" }}
+      >
+        <ChatPanel onClose={() => setOpen(false)} />
+      </div>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 3: Make the orb clickable in `web/components/voice/AmbientOrb.tsx`**
+
+Add the import and use the launcher; pass `onOrbClick` to `JarvisOrb` (its hit-circle sets `pointer-events: all`, which re-enables clicks inside the `pointer-events-none` wrapper):
+
+```tsx
+import { useChatLauncher } from "@/components/chat/ChatLauncher";
+```
+
+Inside the component, add `const { setOpen } = useChatLauncher();` and change the JarvisOrb render to:
+
+```tsx
+        <JarvisOrb className="w-[230px] h-[230px]" onOrbClick={() => setOpen(true)} />
+```
+
+- [ ] **Step 4: Wrap the layout + mount the overlay in `web/app/(console)/layout.tsx`**
+
+Add imports and wrap the whole tree so `AmbientOrb` is inside the provider; mount `ChatOverlay`:
+
+```tsx
+import { ChatLauncherProvider, ChatOverlay } from "@/components/chat/ChatLauncher";
+```
+
+Wrap the existing return:
+
+```tsx
+  return (
+    <ChatLauncherProvider>
+      <VoiceProvider>
+        <FlyoverProvider>
+          <div className="flex min-h-screen grid-bg">
+            <Sidebar />
+            <div className="flex-1 flex flex-col min-w-0">
+              <HeaderBar />
+              <main className="flex-1 p-5 overflow-x-hidden">{children}</main>
+            </div>
+          </div>
+        </FlyoverProvider>
+        <AmbientOrb />
+        <VoiceIndicator />
+      </VoiceProvider>
+      <ChatOverlay />
+    </ChatLauncherProvider>
+  );
+```
+
+- [ ] **Step 5: Render the panel inline at `web/app/(console)/chat/page.tsx`**
+
+```tsx
+"use client";
+import { ChatPanel } from "@/components/chat/ChatPanel";
+
+export default function ChatPage() {
+  return (
+    <div className="mx-auto w-full max-w-3xl h-[calc(100vh-7rem)] rounded-2xl border border-[#4ad6ff]/20 bg-[#070d1a]/40 backdrop-blur-xl overflow-hidden">
+      <ChatPanel />
+    </div>
+  );
+}
+```
+
+- [ ] **Step 6: Typecheck**
+
+Run: `cd web; npx tsc --noEmit`
+Expected: clean.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add web/components/chat/ChatPanel.tsx web/components/chat/ChatLauncher.tsx web/components/voice/AmbientOrb.tsx "web/app/(console)/layout.tsx" "web/app/(console)/chat/page.tsx"
+git commit -m "feat(chat): orb-launched translucent chat overlay"
+```
+
+> Notes: the overlay animates from the orb's corner (`transformOrigin: bottom right`) so it "pulls" to center. Esc and backdrop-click close it. The orb still serves voice (glide/pulse) — clicking it now also opens chat; these don't conflict. If any `text-jarvis-*` class is missing in the Tailwind config, fall back to a near-equivalent (`text-white/60`) — the `#4ad6ff` arbitrary values always work.
 
 ---
 
