@@ -1,2 +1,1 @@
-from .router import router
-__all__ = ["router"]
+# Chat module — router submodule is imported on demand

@@ -34,7 +34,12 @@ def discover_and_mount(app: FastAPI) -> list[ModuleInfo]:
         full_name = f"backend.modules.{mod.name}"
         pkg = importlib.import_module(full_name)
         router: APIRouter | None = getattr(pkg, "router", None)
-        if router is None:
+        # If the package's `router` attribute is a submodule rather than an APIRouter
+        # (happens when __init__.py doesn't shadow the submodule name), unwrap it.
+        import types
+        if isinstance(router, types.ModuleType):
+            router = getattr(router, "router", None)
+        if router is None or not isinstance(router, APIRouter):
             continue
         prefix = f"/api/{mod.name}"
         app.include_router(router, prefix=prefix, tags=[mod.name])

@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 from fastapi import APIRouter, Depends, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -12,6 +13,8 @@ from backend.modules.goals.models import Goal
 from backend.modules.finance.models import Asset, Liability, Transaction
 from backend.modules.profile import storage as profile_storage
 from backend.modules.profile.extract import extract_in_background
+from backend.modules.chat import store
+from backend.modules.chat.models import get_state
 
 
 router = APIRouter()
@@ -141,3 +144,60 @@ def daily_briefing(db: Session = Depends(get_db)):
     )
     reply = provider.chat(system=system, messages=[{"role": "user", "content": user_msg}])
     return ChatResponse(reply=reply, provider=provider.name)
+
+
+class ModelIn(BaseModel):
+    tier: Literal["fast", "smart", "agent"]
+
+
+class ModeIn(BaseModel):
+    mode: Literal["", "brainstorm"]
+
+
+def _summarize(messages: list[dict]) -> str:
+    """Summarize the thread with the fast provider (indirection for tests)."""
+    provider = get_provider()
+    sys = ("Summarize this conversation so it can continue with full context: open "
+           "threads, decisions, the user's surfaced goals/preferences, and any pending todos. "
+           "Be concise; no preamble.")
+    return provider.chat(system=sys, messages=messages, model=settings.voice_model).strip()
+
+
+@router.get("/thread")
+def thread(db: Session = Depends(get_db)):
+    state = get_state(db)
+    turns = store.load_turns(db)
+    messages = []
+    if state.compaction_summary:
+        messages.append({"role": "assistant",
+                         "content": f"(summary of earlier conversation) {state.compaction_summary}",
+                         "tier": None})
+    messages.extend([{"role": t.role, "content": t.content, "tier": t.tier} for t in turns])
+    return {
+        "messages": messages,
+        "tier": state.tier,
+        "mode": state.mode,
+    }
+
+
+@router.post("/model")
+def set_model(body: ModelIn, db: Session = Depends(get_db)):
+    state = get_state(db)
+    state.tier = body.tier
+    db.commit()
+    return {"tier": state.tier}
+
+
+@router.post("/mode")
+def set_mode(body: ModeIn, db: Session = Depends(get_db)):
+    state = get_state(db)
+    state.mode = body.mode
+    db.commit()
+    return {"mode": state.mode}
+
+
+@router.post("/compact")
+def compact(db: Session = Depends(get_db)):
+    summary = _summarize(store.thread_messages(db)) or "(nothing to summarize yet)"
+    store.compact(db, summary)
+    return {"summary": summary}
