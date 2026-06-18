@@ -2,7 +2,7 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { agent, voice as voiceApi } from "@/lib/api";
-import { createRecognizer, extractCommand, speechSupported, Recognizer } from "@/lib/voice";
+import { createRecognizer, extractCommand, speechSupported, wantsDeep, Recognizer } from "@/lib/voice";
 import { createAzureRecognizer } from "@/lib/azureStt";
 
 const ROUTES = ["dashboard", "finance", "spending", "email", "fitness", "workouts",
@@ -117,6 +117,29 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     return false;
   }
 
+  // Poll a deep-agent job and speak the result once the user is idle (non-blocking).
+  async function runDeepAgent(messages: { role: string; content: string }[]) {
+    speak("Let me think on that, sir — I'll keep going while I do.");
+    try {
+      const { job_id } = await agent.deep(messages);
+      const poll = async (): Promise<void> => {
+        const s = await agent.deepStatus(job_id);
+        if (s.status === "running") { setTimeout(poll, 1500); return; }
+        // Deliver at the next natural pause: only speak when not capturing/speaking.
+        const deliver = () => {
+          if (stateRef.current === "capturing" || stateRef.current === "speaking") {
+            setTimeout(deliver, 600); return;
+          }
+          speak(s.text || "I couldn't complete that, sir.");
+        };
+        deliver();
+      };
+      setTimeout(poll, 1500);
+    } catch {
+      speak("I ran into a problem with that, sir.");
+    }
+  }
+
   async function handle(text: string) {
     if (!text) { set("idle"); return; }
     clearIdle();
@@ -124,9 +147,12 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     set("thinking");
     pushMsg("user", text);
 
+    const deep = wantsDeep(text);
     let plan: any;
-    try { plan = await agent.plan(msgsRef.current); }
+    try { plan = await agent.plan(msgsRef.current, deep ? "agent" : undefined); }
     catch { plan = { kind: "reply", text: "Sorry, I couldn't reach the server." }; }
+
+    if (plan?.kind === "escalate") { await runDeepAgent(msgsRef.current); return; }
 
     if (plan?.kind === "action") {
       const ack = plan.ack || "On it, sir.";

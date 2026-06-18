@@ -297,12 +297,18 @@ export type FlyoverWeather = {
 // ---- Agent (action layer) ----
 export type AgentPlan =
   | { kind: "reply"; text: string }
-  | { kind: "action"; tool: string; args: Record<string, any>; ack: string };
+  | { kind: "action"; tool: string; args: Record<string, any>; ack: string }
+  | { kind: "escalate"; reason: string }
+  | { kind: "skill"; name: string };
 export const agent = {
-  plan: (messages: { role: string; content: string }[]) =>
-    api.post<AgentPlan>("/api/agent/plan", { messages }),
+  plan: (messages: { role: string; content: string }[], tier?: string) =>
+    api.post<AgentPlan>("/api/agent/plan", { messages, tier }),
   run: (tool: string, args: Record<string, any>) =>
     api.post<{ text: string }>("/api/agent/run", { tool, args }),
+  deep: (messages: { role: string; content: string }[]) =>
+    api.post<{ job_id: string }>("/api/agent/deep", { messages }),
+  deepStatus: (jobId: string) =>
+    api.get<{ status: "running" | "done" | "error"; text: string }>(`/api/agent/deep/${jobId}`),
 };
 
 // ---- Voice ----

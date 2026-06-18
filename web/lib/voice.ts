@@ -56,6 +56,14 @@ export function _isWakeWord(token: string): boolean {
   return _lev(t, WAKE) <= 2;
 }
 
+const DEEP_PHRASES = ["think hard", "go deep", "really think", "deep dive", "work on it"];
+
+/** True when the user explicitly asks JARVIS to think harder (force the agent tier). */
+export function wantsDeep(text: string): boolean {
+  const t = (text || "").toLowerCase();
+  return DEEP_PHRASES.some(p => t.includes(p));
+}
+
 // Command after the wake word: "" if wake word is trailing-empty, null if absent.
 // The wake word may be the first or second token ("hey jarvis ...").
 export function extractCommand(transcript: string): string | null {
