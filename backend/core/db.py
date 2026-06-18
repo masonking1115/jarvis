@@ -50,6 +50,7 @@ def init_db() -> None:
     from backend.modules.flyover import models as _flyover_models  # noqa: F401
     from backend.modules.profile import models as _profile_models  # noqa: F401
     from backend.modules.skills import models as _skills_models  # noqa: F401
+    from backend.modules.chat import models as _chat_models  # noqa: F401
     Base.metadata.create_all(bind=engine)
     _apply_lightweight_migrations()
     # WAL improves reader/writer concurrency. Set once at startup; best-effort
