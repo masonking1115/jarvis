@@ -41,6 +41,10 @@ no persistence, and no slash commands.
   `/compact` summarizes it in place and continues.
 - **Voice + chat:** tiering applies to voice too; on escalate, voice speaks an
   immediate ack, runs the agent, then speaks a concise summary.
+- **Full autonomy:** the agent tier runs with **no permission gates** — it has
+  the full Claude Code toolset and executes tasks end-to-end without ever
+  stopping to ask the user (the user durably authorizes this for their own local
+  assistant). No "reasonable" task should require a confirmation round-trip.
 - **Reuse:** extend `ClaudeCliProvider` and `agent/service.plan`; reuse the chat
   context builder (`chat/router.py::_build_context`) and persona loader.
 
@@ -98,9 +102,10 @@ Add two methods alongside `chat`/`web_answer`:
 
 - **`agent_text(prompt, context, model=None, timeout=180) -> str`** — a
   non-streaming agentic run for **voice** (and as a fallback). Runs
-  `claude -p <prompt> --output-format text --model <agent model>` with the
-  curated allowed-tools set (below), `cwd = project root`, key stripped. Returns
-  the final text. Used by voice escalation, where only the final answer is spoken.
+  `claude -p <prompt> --output-format text --model <agent model>
+  --permission-mode bypassPermissions`, `cwd = project root`, key stripped.
+  Returns the final text. Used by voice escalation, where only the final answer
+  is spoken.
 
 - **`agent_stream(prompt, context, model=None, timeout=300) -> Iterator[dict]`**
   — the streaming agentic run for **chat**. Uses `subprocess.Popen` with:
@@ -109,8 +114,11 @@ Add two methods alongside `chat`/`web_answer`:
     --append-system-prompt <context>
     --output-format stream-json --verbose --include-partial-messages
     --model <agent model>
-    --allowedTools Read Grep Glob WebSearch WebFetch TodoWrite Bash
+    --permission-mode bypassPermissions
   ```
+  `bypassPermissions` gives the agent the **full toolset** (Read, Grep, Glob,
+  Edit, Write, Bash, WebSearch, WebFetch, TodoWrite, …) and runs every tool
+  without prompting, so a task completes in one turn.
   Read stdout line-by-line; each line is one JSON event. Translate the CLI's
   event schema into our normalized events and `yield` them:
   - assistant text (partial deltas when `--include-partial-messages` is present,
@@ -130,12 +138,15 @@ Notes:
 - **Context seeding:** `context` = persona + profile facts + the chat data
   snapshot (reuse `chat/router._build_context`), passed via
   `--append-system-prompt` so the agent can reason over the user's life data.
-- **Permissions / safety:** headless runs cannot prompt mid-stream, so the agent
-  runs with the curated allowed-tools set above (read/search/web/todo + Bash) and
-  is instructed in `context` to **describe, not execute, genuinely irreversible
-  external actions** (sending messages, spending money, deleting data) — asking
-  the user to confirm in chat first. Interactive per-action approval is future
-  work.
+- **Autonomy:** the agent runs with `--permission-mode bypassPermissions` so it
+  **never stops to ask** — it carries out the task with the full toolset and
+  reports what it did. The user has durably authorized this for their local
+  assistant. The only standing guardrails (which are *not* permission prompts):
+  the app-wide secret rule (never print `.env`/credential values), and the
+  context instruction to act within the user's request rather than taking
+  large, clearly-unrelated destructive actions on its own initiative. When a
+  task genuinely depends on missing information, the agent asks a clarifying
+  question — that is a *question*, not a permission gate.
 - **Exact CLI flag names must be verified against the installed `claude` during
   implementation** (e.g. `--append-system-prompt`, `--include-partial-messages`,
   the stream-json event field names). The plan's first task is a spike that runs
@@ -304,7 +315,8 @@ each slash command + a voice escalation).
 
 ## Future / out of scope
 
-- Interactive per-action permission approval (headless can't prompt today).
+- Optional per-action approval / a "careful mode" toggle (intentionally omitted
+  now — the agent runs fully autonomous per the user's authorization).
 - Multiple named chat threads (one persistent thread for now).
 - Token-level streaming for the smart/fast API tiers (block-as-one-event is fine
   initially; can add real API streaming later).
