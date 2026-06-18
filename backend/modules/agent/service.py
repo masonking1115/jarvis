@@ -49,34 +49,41 @@ def _parse(raw: str) -> dict:
     return {"kind": "reply", "text": (raw or "").strip() or "I'm not sure, sir."}
 
 
-def _smart_answer(db: Session, messages: list[dict]) -> dict:
+def _smart_answer(db: Session, messages: list[dict], extra_context: str | None = None) -> dict:
     from backend.modules.skills import service as skills_service
     provider = get_provider()
     facts = profile_storage.get_context(db)
     system = load_persona()
     if facts:
         system += "\n\n" + facts
+    if extra_context:
+        system += "\n\n" + extra_context
     system += "\n\n" + skills_service.router_context(db)
     text = provider.chat(system=system, messages=messages, model=settings.smart_model)
     return {"kind": "reply", "text": (text or "").strip() or "I'm not sure, sir."}
 
 
 def plan(db: Session, messages: list[dict], skill: str | None = None,
-         tier: str | None = None) -> dict:
+         tier: str | None = None, extra_context: str | None = None) -> dict:
     # Lazy import avoids an import cycle (skills.service imports agent.service._parse).
+    # extra_context: optional data snapshot (e.g. the chat's finance/tasks/goals
+    # context) appended to the system so the fast/smart tiers can answer data
+    # questions directly instead of punting to an action. Voice omits it (stays lean).
     from backend.modules.skills import service as skills_service
     if skill:
         return skills_service.answer(db, skill, messages)
     if tier == "agent":
         return {"kind": "escalate", "reason": "forced agent tier"}
     if tier == "smart":
-        return _smart_answer(db, messages)
+        return _smart_answer(db, messages, extra_context=extra_context)
 
     provider = get_provider()
     facts = profile_storage.get_context(db)
     system = load_persona()
     if facts:
         system += "\n\n" + facts
+    if extra_context:
+        system += "\n\n" + extra_context
     system += "\n\n" + skills_service.router_context(db) + "\n\n" + _PLAN_INSTRUCTION
     raw = provider.chat(system=system, messages=messages, model=settings.voice_model)
     out = _parse(raw)

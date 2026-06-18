@@ -37,7 +37,7 @@ def _events(resp_text):
 def test_stream_reply_persists_turn(ctx, monkeypatch):
     client, _ = ctx
     monkeypatch.setattr(cr.service, "plan",
-                        lambda db, msgs, skill=None, tier=None: {"kind": "reply", "text": "hello sir"})
+                        lambda db, msgs, skill=None, tier=None, extra_context=None: {"kind": "reply", "text": "hello sir"})
     r = client.post("/api/chat/stream", json={"text": "hi"})
     evs = _events(r.text)
     assert {"type": "text", "text": "hello sir"} in evs
@@ -52,7 +52,7 @@ def test_stream_reply_persists_turn(ctx, monkeypatch):
 def test_stream_agent_tier_forwards_agent_events(ctx, monkeypatch):
     client, _ = ctx
     monkeypatch.setattr(cr.service, "plan",
-                        lambda db, msgs, skill=None, tier=None: {"kind": "escalate", "reason": "x"})
+                        lambda db, msgs, skill=None, tier=None, extra_context=None: {"kind": "escalate", "reason": "x"})
     def fake_stream(prompt, context="", **k):
         yield {"type": "text", "text": "working"}
         yield {"type": "todos", "todos": [{"content": "step", "status": "pending"}]}

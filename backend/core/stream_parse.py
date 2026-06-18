@@ -22,6 +22,8 @@ def _tool_summary(name: str, inp: dict) -> str:
 
 def parse_stream_lines(lines: Iterable[str]) -> Iterator[dict]:
     final = ""
+    saw_delta = False   # when partial-message deltas stream, the final assistant
+                        # text block duplicates them — suppress the block in that case
     for raw in lines:
         s = (raw or "").strip()
         if not s:
@@ -35,7 +37,8 @@ def parse_stream_lines(lines: Iterable[str]) -> Iterator[dict]:
             for block in (ev.get("message") or {}).get("content", []) or []:
                 btype = block.get("type")
                 if btype == "text" and block.get("text"):
-                    yield {"type": "text", "text": block["text"]}
+                    if not saw_delta:   # avoid duplicating streamed deltas
+                        yield {"type": "text", "text": block["text"]}
                 elif btype == "tool_use":
                     name = block.get("name") or "tool"
                     inp = block.get("input") or {}
@@ -51,6 +54,7 @@ def parse_stream_lines(lines: Iterable[str]) -> Iterator[dict]:
             # token-level delta when --include-partial-messages is active
             delta = (ev.get("event") or {}).get("delta") or {}
             if delta.get("type") == "text_delta" and delta.get("text"):
+                saw_delta = True
                 yield {"type": "text", "text": delta["text"]}
         elif etype == "result":
             final = ev.get("result") or final

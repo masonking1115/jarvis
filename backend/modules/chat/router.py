@@ -256,10 +256,17 @@ def stream(body: StreamIn):
             state = get_state(db)
             tier = body.tier or state.tier
             msgs = store.thread_messages(db)
-            result = service.plan(db, msgs, tier=tier)
+            # Give the chat planner the data snapshot so fast/smart tiers can answer
+            # data questions ("what's my monthly expenditure?") instead of punting.
+            result = service.plan(db, msgs, tier=tier, extra_context=_build_context(db))
             kind = result.get("kind")
             assistant_text = ""
             todos = None
+
+            # Frontend-only nav actions (navigate/open_flyover) don't answer a typed
+            # question — escalate to the agent, which can actually compute/look it up.
+            if kind == "action" and result.get("tool") in ("navigate", "open_flyover"):
+                kind = "escalate"
 
             if kind == "escalate" or tier == "agent":
                 prompt = "\n\n".join(f"{m['role']}: {m['content']}" for m in msgs)

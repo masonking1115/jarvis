@@ -32,6 +32,21 @@ def test_parse_tolerates_garbage_lines():
     assert events[-1] == {"type": "done", "text": "ok"}
 
 
+def test_partial_deltas_suppress_duplicate_final_block():
+    # With --include-partial-messages the deltas stream, then the assistant block
+    # repeats the full text — the parser must emit only the deltas (no duplicate).
+    lines = [
+        '{"type":"stream_event","event":{"delta":{"type":"text_delta","text":"Hel"}}}',
+        '{"type":"stream_event","event":{"delta":{"type":"text_delta","text":"lo"}}}',
+        '{"type":"assistant","message":{"content":[{"type":"text","text":"Hello"}]}}',
+        '{"type":"result","result":"Hello"}',
+    ]
+    events = list(parse_stream_lines(iter(lines)))
+    texts = [e["text"] for e in events if e["type"] == "text"]
+    assert texts == ["Hel", "lo"]   # the full "Hello" block is NOT re-emitted
+    assert events[-1] == {"type": "done", "text": "Hello"}
+
+
 from pathlib import Path
 
 
