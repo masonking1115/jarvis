@@ -6,6 +6,7 @@ import { flyover, FlyoverConfig, FlyoverWeather } from "@/lib/api";
 import { weatherToEffects } from "@/lib/weatherEffects";
 import { applyEffects } from "./effects";
 import { JarvisOrb } from "@/components/JarvisOrb";
+import { useChatLauncher } from "@/components/chat/ChatLauncher";
 
 const ORBIT_RATE = 0.0006;    // radians/frame — slow cinematic orbit
 const DEFAULT_RANGE = 200;    // meters from the point — frames the property
@@ -28,6 +29,7 @@ function getDevicePosition(): Promise<Loc | null> {
 
 export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }) {
   const router = useRouter();
+  const { setOpen: setChatOpen } = useChatLauncher();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<any>(null);
   const coordsRef = useRef<Loc | null>(null);
@@ -49,7 +51,6 @@ export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }
     if (v) applyEffects((window as any).Cesium, v.scene, weatherToEffects(w));
   }
 
-  function goDashboard() { onExit?.(); router.push("/dashboard"); }
 
   function flyToAddress(Cesium: any, viewer: any, lat: number, lng: number) {
     const center = Cesium.Cartesian3.fromDegrees(lng, lat, 0);
@@ -201,11 +202,11 @@ export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }
           border: "1px solid rgba(74, 214, 255, 0.35)",
           boxShadow: "inset 0 0 60px rgba(74, 214, 255, 0.10), 0 0 30px rgba(74, 214, 255, 0.15)",
         }} />
-      {/* JARVIS hero orb (rings + breathing core + wordmark), bottom-right — its core clicks through to the dashboard.
+      {/* JARVIS hero orb (rings + breathing core + wordmark), bottom-right — clicking it opens the chat.
           Only wire the click while the flyover is OPEN: JarvisOrb's hit-circle uses inline pointer-events:all, which
           would otherwise pierce this closed (pointer-events-none) layer and steal clicks from the ambient orb below. */}
       <div className="pointer-events-none absolute bottom-2 right-2">
-        <JarvisOrb className="w-[300px] h-[300px]" onOrbClick={open ? goDashboard : undefined} />
+        <JarvisOrb className="w-[300px] h-[300px]" onOrbClick={open ? () => setChatOpen(true) : undefined} />
       </div>
       {/* HUD */}
       <div className="absolute top-4 left-4 panel !bg-jarvis-panel/70 backdrop-blur px-4 py-3 max-w-xs">

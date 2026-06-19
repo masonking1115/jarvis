@@ -24,7 +24,7 @@ export function ChatOverlay() {
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[40] flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4" onClick={() => setOpen(false)}>
       <div className="absolute inset-0 bg-[#040810]/50 backdrop-blur-md"
            style={{ opacity: shown ? 1 : 0, transition: "opacity 200ms ease" }} />
       <div
