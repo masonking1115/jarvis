@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api, Event } from "@/lib/api";
 import { Panel } from "@/components/Panel";
 import { CategoryIcon, CATEGORIES, categoryMeta } from "@/components/CategoryIcon";
+import { WeekTodos } from "@/components/WeekTodos";
 
 function todayDateISO() {
   const d = new Date(); d.setHours(0, 0, 0, 0);
@@ -74,6 +75,10 @@ export default function SchedulePage() {
           <button className="btn-ghost text-sm" onClick={() => setDay(todayDateISO())}>Today</button>
         </div>
       </div>
+
+      <Panel title="This Week">
+        <WeekTodos />
+      </Panel>
 
       <Panel title="Add to Day">
         <form onSubmit={add} className="grid grid-cols-12 gap-2">

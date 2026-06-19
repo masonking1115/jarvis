@@ -40,6 +40,12 @@ export function FlyoverProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // Space exits the map view (only while open); Escape toggles it.
+      if (e.key === " " && open && !isTypingTarget(document.activeElement)) {
+        e.preventDefault();
+        setOpen(false);
+        return;
+      }
       if (e.key !== "Escape") return;
       // Don't hijack Esc while typing or when a modal is open (modals handle Esc themselves).
       if (!open && isTypingTarget(document.activeElement)) return;

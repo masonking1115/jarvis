@@ -17,6 +17,12 @@ TOOLS = [
     {"name": "open_flyover", "where": "frontend",
      "desc": "Open the full-screen photoreal map/flyover of the user's address.",
      "args": "(none)"},
+    {"name": "add_todo", "where": "backend",
+     "desc": "Add a to-do/task to the user's list. Use when the user wants to remember or schedule something to do.",
+     "args": "title (string): the task; due (string, optional): ISO date YYYY-MM-DD if the user names a day; priority (int 1-5, optional, 1=high)"},
+    {"name": "list_todos", "where": "backend",
+     "desc": "List the user's open to-dos for this week.",
+     "args": "(none)"},
 ]
 NAMES = {t["name"] for t in TOOLS}
 

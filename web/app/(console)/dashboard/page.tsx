@@ -6,6 +6,7 @@ import { StatusPill, Status } from "@/components/StatusPill";
 import { Ring } from "@/components/Ring";
 import { Sparkline } from "@/components/Sparkline";
 import { CategoryIcon } from "@/components/CategoryIcon";
+import { WeekTodos } from "@/components/WeekTodos";
 
 type Fitness = {
   placeholder: boolean;
@@ -70,6 +71,11 @@ export default function Dashboard() {
         <Panel title="Today" href="/schedule" hrefLabel="View full schedule"
                className="col-span-12 xl:col-span-3">
           <TodayList events={events} onToggle={toggleEvent} />
+        </Panel>
+
+        <Panel title="This Week" href="/schedule" hrefLabel="All to-dos"
+               className="col-span-12 md:col-span-6 xl:col-span-3">
+          <WeekTodos compact />
         </Panel>
 
         <Panel title="Goals & Progress" href="/goals" hrefLabel="View all goals"

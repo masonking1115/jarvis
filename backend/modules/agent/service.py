@@ -119,6 +119,10 @@ def _weather_line(db: Session, location: str | None) -> str:
 def run(db: Session, tool: str, args: dict | None) -> dict:
     args = args or {}
     try:
+        if tool == "add_todo":
+            return _add_todo(db, args)
+        if tool == "list_todos":
+            return {"text": _list_todos(db)}
         if tool == "weather":
             return {"text": _weather_line(db, args.get("location"))}
         if tool == "web_search":
@@ -135,3 +139,55 @@ def run(db: Session, tool: str, args: dict | None) -> dict:
         return {"text": "I can't do that yet, sir."}
     except Exception:  # noqa: BLE001 — never leak keys/stack to the client
         return {"text": "I ran into a problem with that, sir."}
+
+
+def _parse_due(due) -> "datetime | None":
+    from datetime import datetime
+    if not due:
+        return None
+    s = str(due).strip()
+    for cut in (19, 10):  # full ISO datetime, then date-only
+        try:
+            return datetime.fromisoformat(s[:cut])
+        except ValueError:
+            continue
+    return None
+
+
+def _add_todo(db: Session, args: dict) -> dict:
+    from backend.modules.tasks.models import Task
+    title = (args.get("title") or "").strip()
+    if not title:
+        return {"text": "What should I add to your list, sir?"}
+    due = _parse_due(args.get("due"))
+    try:
+        pr = int(args.get("priority"))
+    except (TypeError, ValueError):
+        pr = 3
+    db.add(Task(title=title, priority=max(1, min(5, pr)), due_at=due))
+    db.commit()
+    when = f", due {due.strftime('%a %b %d')}" if due else ""
+    return {"text": f"Added to your list, sir: {title}{when}."}
+
+
+def _week_todos(db: Session) -> list:
+    """Open tasks that are undated, overdue, or due within the next 7 days."""
+    from datetime import datetime, timedelta
+    from backend.modules.tasks.models import Task
+    now = datetime.now()
+    end = now + timedelta(days=7)
+    rows = db.query(Task).filter(Task.done == False).all()  # noqa: E712
+    week = [t for t in rows if t.due_at is None or t.due_at <= end]
+    week.sort(key=lambda t: (t.due_at is None, t.due_at or now, t.priority))
+    return week
+
+
+def _list_todos(db: Session) -> str:
+    week = _week_todos(db)
+    if not week:
+        return "Your list is clear for this week, sir."
+    lines = []
+    for t in week[:12]:
+        due = f" — {t.due_at.strftime('%a')}" if t.due_at else ""
+        lines.append(f"• {t.title}{due}")
+    return "Here's your week, sir:\n" + "\n".join(lines)
