@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { api, Goal, Event, ChatReply, Project, FinanceOverview } from "@/lib/api";
+import { api, vision, Goal, Event, ChatReply, Project, FinanceOverview } from "@/lib/api";
 import { Panel } from "@/components/Panel";
+import { useCamera } from "@/components/vision/CameraProvider";
 import { StatusPill, Status } from "@/components/StatusPill";
 import { Ring } from "@/components/Ring";
 import { Sparkline } from "@/components/Sparkline";
@@ -32,6 +33,7 @@ export default function Dashboard() {
   const [chatLog, setChatLog] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
+  const camera = useCamera();
 
   async function refresh() {
     const [g, e, f, fit, an, pr, ag] = await Promise.all([
@@ -55,10 +57,19 @@ export default function Dashboard() {
 
   async function sendChat(e: React.FormEvent) {
     e.preventDefault();
-    if (!chatInput.trim() || chatBusy) return;
-    const next = [...chatLog, { role: "user" as const, content: chatInput }];
+    const text = chatInput.trim();
+    if (!text || chatBusy) return;
+    const next = [...chatLog, { role: "user" as const, content: text }];
     setChatLog(next); setChatInput(""); setChatBusy(true);
     try {
+      // Camera on → answer over a captured webcam frame via Claude vision.
+      if (camera.enabled) {
+        let frame: string | null = null;
+        for (let i = 0; i < 12 && !frame; i++) { frame = camera.capture(); if (!frame) await new Promise(r => setTimeout(r, 200)); }
+        const ans = frame ? (await vision.look(frame, text)).text : (camera.error || "I can't see — the camera isn't ready, sir.");
+        setChatLog([...next, { role: "assistant", content: ans }]);
+        return;
+      }
       const r = await api.post<ChatReply>("/api/chat", { messages: next });
       setChatLog([...next, { role: "assistant", content: r.reply }]);
     } finally { setChatBusy(false); }

@@ -358,11 +358,12 @@ export const chat = {
   setMode: (mode: string)     => api.post<{ mode: string }>("/api/chat/mode", { mode }),
   compact: ()                 => api.post<{ summary: string }>("/api/chat/compact", {}),
   // Stream a message; calls onEvent for each parsed ChatEvent until "done".
-  async stream(text: string, tier: string | undefined, onEvent: (e: ChatEvent) => void): Promise<void> {
+  async stream(text: string, tier: string | undefined, onEvent: (e: ChatEvent) => void, signal?: AbortSignal): Promise<void> {
     const res = await fetch("/api/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, tier }),
+      signal,
     });
     if (!res.body) throw new Error("no stream body");
     const reader = res.body.getReader();

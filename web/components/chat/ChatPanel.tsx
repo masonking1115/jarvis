@@ -26,9 +26,26 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
   const [tools, setTools] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  function stop() { abortRef.current?.abort(); }
 
   useEffect(() => { chat.thread().then(t => { setMessages(t.messages); setTier(t.tier); setMode(t.mode); }); }, []);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, streaming, todos]);
+  // Abort any in-flight stream when the chat unmounts (e.g. click-outside closes it).
+  useEffect(() => () => abortRef.current?.abort(), []);
+  // Spacebar: stop a streaming response; press again (when idle, not typing) to close the chat.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== " ") return;
+      const t = e.target as HTMLElement | null;
+      const typing = t?.tagName === "INPUT" || t?.tagName === "TEXTAREA" || t?.isContentEditable;
+      if (busy) { e.preventDefault(); stop(); return; }
+      if (!typing) { e.preventDefault(); onClose?.(); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, onClose]);
 
   const showSlash = input.startsWith("/") && !input.includes(" ");
 
@@ -70,6 +87,8 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
       return;
     }
 
+    const controller = new AbortController();
+    abortRef.current = controller;
     setBusy(true); setStreaming(""); setTodos([]); setTools([]);
     let acc = "";
     const onEvent = (ev: ChatEvent) => {
@@ -79,11 +98,13 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
       else if (ev.type === "error") { acc += ev.text; setStreaming(acc); }
     };
     try {
-      await chat.stream(text, tier, onEvent);
+      await chat.stream(text, tier, onEvent, controller.signal);
       setMessages(m => [...m, { role: "assistant", content: acc, tier }]);
     } catch (err: any) {
-      setMessages(m => [...m, { role: "assistant", content: `Error: ${err.message}`, tier }]);
-    } finally { setBusy(false); setStreaming(""); setTodos([]); setTools([]); }
+      // Aborted (spacebar / click-outside): keep whatever streamed so far.
+      const stopped = err?.name === "AbortError";
+      setMessages(m => [...m, { role: "assistant", content: stopped ? (acc || "(stopped)") : `Error: ${err.message}`, tier }]);
+    } finally { abortRef.current = null; setBusy(false); setStreaming(""); setTodos([]); setTools([]); }
   }
 
   return (
