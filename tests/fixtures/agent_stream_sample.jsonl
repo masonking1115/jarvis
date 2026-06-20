@@ -1,0 +1,3 @@
+{"type":"system","subtype":"init","cwd":"C:\\Users\\mking\\Downloads\\JARVIS\\jarvis","session_id":"28fea0bb-3c98-4901-b469-4eb7f1a1ba0b","model":"claude-sonnet-4-6","permissionMode":"acceptEdits"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"The default agent_model is \"opus\"."}]}}
+{"type":"result","subtype":"success","is_error":false,"result":"The default agent_model is \"opus\".","session_id":"28fea0bb-3c98-4901-b469-4eb7f1a1ba0b"}
