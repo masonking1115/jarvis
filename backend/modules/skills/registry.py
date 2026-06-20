@@ -11,7 +11,7 @@ from .models import SkillSetting
 
 # Actions available in the default ("general") context when no specialized
 # instruction skill is active. This preserves today's behavior.
-GENERAL_ACTIONS = ["web_search", "weather", "navigate", "open_flyover"]
+GENERAL_ACTIONS = ["web_search", "weather", "navigate", "open_flyover", "look"]
 
 
 @dataclass
