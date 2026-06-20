@@ -23,7 +23,7 @@ def test_agent_text_strips_key_and_returns_stdout(monkeypatch):
 
     out = p.agent_text("do the thing", context="ctx")
     assert out == "the agent answer"
-    assert "bypassPermissions" in captured["cmd"]
+    assert "acceptEdits" in captured["cmd"]
     assert "ANTHROPIC_API_KEY" not in captured["env"]
 
 

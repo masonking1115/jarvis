@@ -6,6 +6,13 @@ from typing import Protocol
 from .config import settings
 from .stream_parse import parse_stream_lines
 
+# Tools the autonomous agent may use, and dangerous patterns it may never run.
+# Per-invocation flags (not a project settings.json) so interactive Claude Code
+# sessions in this repo stay unrestricted.
+_AGENT_ALLOWED = ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch", "TodoWrite"]
+_AGENT_DISALLOWED = ["Bash(rm *)", "Bash(git push *)", "Bash(sudo *)", "Bash(curl *)",
+                     "Bash(dd *)", "Bash(mkfs *)", "Bash(shutdown *)"]
+
 
 class LLMProvider(Protocol):
     name: str
@@ -156,10 +163,13 @@ class ClaudeCliProvider:
         env = {k: v for k, v in os.environ.items()
                if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
         cmd = [self.path, "-p", prompt, "--output-format", "text",
-               "--permission-mode", "bypassPermissions",
-               "--model", (model or self.model)]
+               "--permission-mode", "acceptEdits",
+               "--max-turns", str(settings.agent_max_turns),
+               "--model", (model or self.model),
+               "--allowedTools", *_AGENT_ALLOWED,
+               "--disallowedTools", *_AGENT_DISALLOWED]
         if context:
-            cmd[3:3] = ["--append-system-prompt", context]
+            cmd += ["--append-system-prompt", context]
         proc = subprocess.run(
             cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
             env=env, cwd=self._project_cwd(), timeout=timeout,
@@ -169,7 +179,7 @@ class ClaudeCliProvider:
         return proc.stdout.strip().replace("&#65533;", "-")
 
     def agent_stream(self, prompt: str, context: str = "", model: str | None = None,
-                     timeout: int = 300):
+                     session_id: str | None = None, timeout: int = 300):
         """Streaming autonomous agent run (used by chat). Yields normalized events."""
         if not self.available:
             yield {"type": "text", "text": "The agent is unavailable, sir."}
@@ -180,10 +190,15 @@ class ClaudeCliProvider:
                if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
         cmd = [self.path, "-p", prompt,
                "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-               "--permission-mode", "bypassPermissions",
-               "--model", (model or self.model)]
+               "--permission-mode", "acceptEdits",
+               "--max-turns", str(settings.agent_max_turns),
+               "--model", (model or self.model),
+               "--allowedTools", *_AGENT_ALLOWED,
+               "--disallowedTools", *_AGENT_DISALLOWED]
         if context:
-            cmd[3:3] = ["--append-system-prompt", context]
+            cmd += ["--append-system-prompt", context]
+        if session_id:
+            cmd += ["--resume", session_id]
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True, encoding="utf-8", errors="replace",
