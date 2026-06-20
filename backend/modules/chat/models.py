@@ -21,6 +21,7 @@ class ChatState(Base):
     tier: Mapped[str] = mapped_column(String(16), default="fast")     # fast | smart | agent
     mode: Mapped[str] = mapped_column(String(16), default="")         # "" | brainstorm
     compaction_summary: Mapped[str] = mapped_column(Text, default="")
+    agent_session_id: Mapped[str] = mapped_column(String(64), default="")
 
 
 def get_state(db) -> "ChatState":

@@ -96,6 +96,9 @@ def _apply_lightweight_migrations() -> None:
         "email_purchases": [
             ("liability_id", "INTEGER"),
         ],
+        "chat_state": [
+            ("agent_session_id", "VARCHAR(64) DEFAULT ''"),
+        ],
     }
     with engine.begin() as conn:
         for table, cols in additions.items():

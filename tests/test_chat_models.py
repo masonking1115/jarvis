@@ -26,3 +26,11 @@ def test_chat_turns_persist_and_order(db):
     rows = db.query(ChatTurn).order_by(ChatTurn.id.asc()).all()
     assert [(r.role, r.content) for r in rows] == [("user", "hi"), ("assistant", "hello")]
     assert rows[1].tier == "fast"
+
+
+def test_chat_state_has_agent_session_id(db):
+    s = get_state(db)
+    assert s.agent_session_id == ""
+    s.agent_session_id = "sid-42"
+    db.commit()
+    assert get_state(db).agent_session_id == "sid-42"
