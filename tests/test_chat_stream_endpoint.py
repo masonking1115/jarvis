@@ -63,3 +63,24 @@ def test_stream_agent_tier_forwards_agent_events(ctx, monkeypatch):
     evs = _events(r.text)
     assert any(e["type"] == "todos" for e in evs)
     assert evs[-1]["type"] == "done"
+
+
+def test_stream_agent_persists_session_and_hides_it(ctx, monkeypatch):
+    client, TestingSession = ctx
+    monkeypatch.setattr(cr.service, "plan",
+                        lambda db, msgs, skill=None, tier=None, extra_context=None: {"kind": "escalate", "reason": "x"})
+    seen = {}
+    def fake_stream(prompt, context="", session_id=None):
+        seen["session_id"] = session_id
+        yield {"type": "session", "session_id": "sid-77"}
+        yield {"type": "text", "text": "working"}
+        yield {"type": "done", "text": "working"}
+    monkeypatch.setattr(cr, "_agent_stream", fake_stream)
+
+    r = client.post("/api/chat/stream", json={"text": "fix the bug", "tier": "agent"})
+    evs = _events(r.text)
+    assert not any(e["type"] == "session" for e in evs)     # session not leaked to client
+    assert evs[-1]["type"] == "done"
+    # persisted for next turn
+    from backend.modules.chat.models import get_state
+    assert get_state(TestingSession()).agent_session_id == "sid-77"

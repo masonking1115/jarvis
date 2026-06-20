@@ -237,9 +237,9 @@ class StreamIn(BaseModel):
     tier: str | None = None   # overrides the sticky tier for this message
 
 
-def _agent_stream(prompt: str, context: str = "", **kw):
+def _agent_stream(prompt: str, context: str = "", session_id: str | None = None, **kw):
     """Indirection so tests can monkeypatch the CLI streaming call."""
-    yield from ClaudeCliProvider().agent_stream(prompt, context=context)
+    yield from ClaudeCliProvider().agent_stream(prompt, context=context, session_id=session_id)
 
 
 def _sse(event: dict) -> str:
@@ -271,7 +271,11 @@ def stream(body: StreamIn):
             if kind == "escalate" or tier == "agent":
                 prompt = "\n\n".join(f"{m['role']}: {m['content']}" for m in msgs)
                 context = f"{load_persona()}\n\n{_build_context(db)}"
-                for ev in _agent_stream(prompt, context=context):
+                for ev in _agent_stream(prompt, context=context, session_id=state.agent_session_id or None):
+                    if ev["type"] == "session":
+                        state.agent_session_id = ev["session_id"]
+                        db.commit()
+                        continue                      # internal — don't send to the client
                     if ev["type"] == "text":
                         assistant_text += ev["text"]
                     elif ev["type"] == "todos":
