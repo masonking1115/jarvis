@@ -158,7 +158,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       setLastSpoken(msg); await speak(msg); return;
     }
     let answer = "I couldn't make that out, sir.";
-    try { answer = (await visionApi.look(frame, question)).text || answer; }
+    try { answer = (await visionApi.look(frame, question, true)).text || answer; }
     catch { answer = "I ran into a problem looking at that, sir."; }
     pushMsg("assistant", answer);
     setLastSpoken(answer);

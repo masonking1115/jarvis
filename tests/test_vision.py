@@ -49,3 +49,39 @@ def test_look_unconfigured_is_graceful(monkeypatch):
 def test_look_rejects_garbage_image(monkeypatch):
     monkeypatch.setattr(vr.settings, "anthropic_api_key", "sk-test")
     assert "didn't come through" in client.post("/api/vision/look", json={"image": "!!!not base64!!!"}).json()["text"]
+
+
+def test_look_remember_persists_to_chat_thread(monkeypatch):
+    monkeypatch.setattr(vr.settings, "anthropic_api_key", "sk-test")
+
+    class _FakeProvider:
+        def vision(self, q, data, media_type="image/jpeg", **k):
+            return "an FPGA development board"
+
+    import backend.core.llm as llm
+    monkeypatch.setattr(llm, "AnthropicProvider", lambda: _FakeProvider())
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from backend.core.db import Base, get_db
+    import backend.modules.chat.models  # noqa: F401 — register chat tables on Base
+    eng = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(eng)
+    TestingSession = sessionmaker(bind=eng)
+
+    def _override():
+        db = TestingSession()
+        try: yield db
+        finally: db.close()
+
+    app.dependency_overrides[get_db] = _override
+    try:
+        r = client.post("/api/vision/look", json={"image": _B64, "question": "what is this?", "remember": True})
+        assert r.json()["text"] == "an FPGA development board"
+        from backend.modules.chat import store
+        msgs = store.thread_messages(TestingSession())
+        assert any(m["content"] == "what is this?" for m in msgs)          # user question saved
+        assert any("FPGA" in m["content"] for m in msgs)                    # vision answer saved
+    finally:
+        app.dependency_overrides.pop(get_db, None)

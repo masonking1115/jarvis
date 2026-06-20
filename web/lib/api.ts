@@ -317,8 +317,8 @@ export const agent = {
 // ---- Vision (webcam → Claude vision) ----
 export const vision = {
   config: () => api.get<{ available: boolean; reason?: string }>("/api/vision/config"),
-  look: (image: string, question?: string) =>
-    api.post<{ text: string }>("/api/vision/look", { image, question }),
+  look: (image: string, question?: string, remember = false) =>
+    api.post<{ text: string }>("/api/vision/look", { image, question, remember }),
 };
 
 // ---- Voice ----

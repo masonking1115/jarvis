@@ -66,7 +66,7 @@ export default function Dashboard() {
       if (camera.enabled) {
         let frame: string | null = null;
         for (let i = 0; i < 12 && !frame; i++) { frame = camera.capture(); if (!frame) await new Promise(r => setTimeout(r, 200)); }
-        const ans = frame ? (await vision.look(frame, text)).text : (camera.error || "I can't see — the camera isn't ready, sir.");
+        const ans = frame ? (await vision.look(frame, text, true)).text : (camera.error || "I can't see — the camera isn't ready, sir.");
         setChatLog([...next, { role: "assistant", content: ans }]);
         return;
       }

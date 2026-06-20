@@ -78,7 +78,7 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
       for (let i = 0; i < 12 && !frame; i++) { frame = camera.capture(); if (!frame) await new Promise(r => setTimeout(r, 200)); }
       try {
         const ans = frame
-          ? (await visionApi.look(frame, text)).text
+          ? (await visionApi.look(frame, text, true)).text   // remember=true → saved to the thread
           : (camera.error || "I can't see anything — the camera isn't ready.");
         setMessages(m => [...m, { role: "assistant", content: ans, tier: "vision" }]);
       } catch (err: any) {
