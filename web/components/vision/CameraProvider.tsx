@@ -44,9 +44,13 @@ export function CameraProvider({ children }: { children: ReactNode }) {
         setError("");
       } catch (e: any) {
         const n = e?.name;
-        setError(n === "NotAllowedError" ? "Camera permission denied."
-          : n === "NotFoundError" ? "No camera found."
-          : "Could not start the camera.");
+        const msg = n === "NotAllowedError" ? "Camera permission denied — click the camera icon in the address bar and Allow, then retry."
+          : n === "NotFoundError" || n === "DevicesNotFoundError" ? "No camera found — is the C920 plugged in?"
+          : n === "NotReadableError" || n === "TrackStartError" ? "Camera is in use by another app (close Zoom/Teams/OBS) and retry."
+          : n === "OverconstrainedError" ? "Camera doesn't support the requested mode."
+          : `Could not start the camera (${n || e?.message || "unknown"}).`;
+        console.error("[camera] getUserMedia failed:", n, e);
+        setError(msg);
         setEnabled(false);
       }
     }
@@ -75,6 +79,17 @@ export function CameraProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={{ enabled, setEnabled, error, capture }}>
       {children}
+      {error && (
+        <div className="fixed bottom-5 left-5 z-[60] max-w-xs rounded-xl border border-jarvis-bad/60 bg-[#1a0810]/90 backdrop-blur px-3 py-2 text-[12px] text-jarvis-bad shadow-lg">
+          <div className="flex items-start gap-2">
+            <span>📷</span>
+            <span className="flex-1">{error}</span>
+            <button onClick={() => setError("")} className="text-jarvis-muted hover:text-white">✕</button>
+          </div>
+          <button onClick={() => { setError(""); setEnabled(true); }}
+                  className="mt-1 text-[11px] text-jarvis-accent hover:underline">Retry</button>
+        </div>
+      )}
       {enabled && (
         <div className="fixed bottom-5 left-5 z-[30] rounded-xl overflow-hidden border border-[#4ad6ff]/40 shadow-[0_0_24px_rgba(74,214,255,0.25)]">
           {/* Rendered (not display:none) so frames decode and capture() works. */}
