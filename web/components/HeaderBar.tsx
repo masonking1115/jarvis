@@ -2,10 +2,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useVoice } from "./voice/VoiceProvider";
+import { useCamera } from "./vision/CameraProvider";
 
 export function HeaderBar() {
   const [now, setNow] = useState<Date | null>(null);
   const { enabled, setEnabled, state, supported } = useVoice();
+  const { enabled: camOn, setEnabled: setCamOn, error: camError } = useCamera();
   useEffect(() => {
     setNow(new Date());
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -35,6 +37,11 @@ export function HeaderBar() {
               🎙 VOICE{enabled && state !== "idle" ? ` · ${state}` : ""}
             </button>
           )}
+          <button onClick={() => setCamOn(!camOn)} title={camError || "Toggle JARVIS camera"}
+            className={`pill ${camOn ? "text-jarvis-accent" : "text-jarvis-muted"}`}>
+            <span className={`dot ${camOn ? "dot-info" : "bg-jarvis-mute2"}`} style={{ width: 8, height: 8 }} />
+            📷 CAMERA{camOn ? " · on" : ""}
+          </button>
         </div>
 
         {/* Right: clock + date + tagline */}

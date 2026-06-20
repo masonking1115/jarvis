@@ -1,7 +1,8 @@
 "use client";
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { agent, voice as voiceApi } from "@/lib/api";
+import { agent, voice as voiceApi, vision as visionApi } from "@/lib/api";
+import { useCamera } from "@/components/vision/CameraProvider";
 import { createRecognizer, extractCommand, speechSupported, wantsDeep, Recognizer } from "@/lib/voice";
 import { createAzureRecognizer } from "@/lib/azureStt";
 
@@ -22,6 +23,7 @@ export const useVoice = () => useContext(Ctx);
 
 export function VoiceProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const camera = useCamera();
   // Computed after mount so server and first client render match (no hydration mismatch).
   const [supported, setSupported] = useState(false);
   const [enabled, setEnabledState] = useState(false);
@@ -140,6 +142,29 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Capture a webcam frame and answer about it via Claude vision. Enables the
+  // camera on demand (waits briefly for the first frame) so "what do you see?"
+  // works even if the camera wasn't already on.
+  async function runLook(question: string | undefined, ack?: string) {
+    await speak(ack || "Let me take a look, sir.", { final: false });
+    if (!camera.enabled) camera.setEnabled(true);
+    let frame: string | null = null;
+    for (let i = 0; i < 16 && !frame; i++) {   // up to ~4s for the stream to warm up
+      frame = camera.capture();
+      if (!frame) await new Promise(r => setTimeout(r, 250));
+    }
+    if (!frame) {
+      const msg = camera.error || "I can't see anything — enable the camera, sir.";
+      setLastSpoken(msg); await speak(msg); return;
+    }
+    let answer = "I couldn't make that out, sir.";
+    try { answer = (await visionApi.look(frame, question)).text || answer; }
+    catch { answer = "I ran into a problem looking at that, sir."; }
+    pushMsg("assistant", answer);
+    setLastSpoken(answer);
+    await speak(answer);
+  }
+
   async function handle(text: string) {
     if (!text) { set("idle"); return; }
     clearIdle();
@@ -153,6 +178,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     catch { plan = { kind: "reply", text: "Sorry, I couldn't reach the server." }; }
 
     if (plan?.kind === "escalate") { await runDeepAgent(msgsRef.current); return; }
+
+    if (plan?.kind === "action" && plan.tool === "look") {
+      await runLook(plan.args?.question, plan.ack);
+      return;
+    }
 
     if (plan?.kind === "action") {
       const ack = plan.ack || "On it, sir.";

@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { chat, ChatTurn } from "@/lib/api";
+import { chat, vision as visionApi, ChatTurn } from "@/lib/api";
 import type { ChatEvent } from "@/lib/sseParse";
+import { useCamera } from "@/components/vision/CameraProvider";
 
 type Todo = { content: string; status: string };
 const TIERS = ["fast", "smart", "agent"] as const;
@@ -14,6 +15,7 @@ const SLASH = [
 const todoIcon = (s: string) => (s === "completed" ? "✓" : s === "in_progress" ? "◐" : "○");
 
 export function ChatPanel({ onClose }: { onClose?: () => void }) {
+  const camera = useCamera();
   const [messages, setMessages] = useState<ChatTurn[]>([]);
   const [tier, setTier] = useState("fast");
   const [mode, setMode] = useState("");
@@ -51,6 +53,23 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
     if (text.startsWith("/")) { if (await runSlash(text)) return; }
     setNote("");
     setMessages(m => [...m, { role: "user", content: text, tier: null }]);
+
+    // Camera on → answer over a captured frame via Claude vision.
+    if (camera.enabled) {
+      setBusy(true);
+      let frame: string | null = null;
+      for (let i = 0; i < 12 && !frame; i++) { frame = camera.capture(); if (!frame) await new Promise(r => setTimeout(r, 200)); }
+      try {
+        const ans = frame
+          ? (await visionApi.look(frame, text)).text
+          : (camera.error || "I can't see anything — the camera isn't ready.");
+        setMessages(m => [...m, { role: "assistant", content: ans, tier: "vision" }]);
+      } catch (err: any) {
+        setMessages(m => [...m, { role: "assistant", content: `Error: ${err.message}`, tier: "vision" }]);
+      } finally { setBusy(false); }
+      return;
+    }
+
     setBusy(true); setStreaming(""); setTodos([]); setTools([]);
     let acc = "";
     const onEvent = (ev: ChatEvent) => {
@@ -122,7 +141,16 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
           </div>
         )}
         <form onSubmit={send} className="flex gap-2">
-          <input className="flex-1 rounded-xl bg-white/5 border border-[#4ad6ff]/20 px-3 py-2 outline-none focus:border-[#4ad6ff]/50 placeholder:text-jarvis-muted" placeholder="Ask Jarvis…  (/ for commands)" value={input} onChange={e => setInput(e.target.value)} autoFocus />
+          <button type="button" onClick={() => camera.setEnabled(!camera.enabled)}
+            title={camera.error || (camera.enabled ? "Camera on — your message is answered over what Jarvis sees" : "Turn on the camera")}
+            className={`px-3 rounded-xl border transition-colors ${camera.enabled
+              ? "border-[#4ad6ff]/60 bg-[#4ad6ff]/15 text-[#9fe6ff]"
+              : "border-[#4ad6ff]/20 bg-white/5 text-jarvis-muted hover:text-white"}`}>
+            📷
+          </button>
+          <input className="flex-1 rounded-xl bg-white/5 border border-[#4ad6ff]/20 px-3 py-2 outline-none focus:border-[#4ad6ff]/50 placeholder:text-jarvis-muted"
+            placeholder={camera.enabled ? "Ask about what Jarvis sees…" : "Ask Jarvis…  (/ for commands)"}
+            value={input} onChange={e => setInput(e.target.value)} autoFocus />
           <button className="btn" disabled={busy}>{busy ? "…" : "Send"}</button>
         </form>
       </div>

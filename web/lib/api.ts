@@ -314,6 +314,13 @@ export const agent = {
     api.get<{ status: "running" | "done" | "error"; text: string }>(`/api/agent/deep/${jobId}`),
 };
 
+// ---- Vision (webcam → Claude vision) ----
+export const vision = {
+  config: () => api.get<{ available: boolean; reason?: string }>("/api/vision/config"),
+  look: (image: string, question?: string) =>
+    api.post<{ text: string }>("/api/vision/look", { image, question }),
+};
+
 // ---- Voice ----
 export type VoiceConfig = { available: boolean; voice: string; reason?: string };
 export const voice = {

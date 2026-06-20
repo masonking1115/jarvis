@@ -39,6 +39,22 @@ class AnthropicProvider:
         parts = [b.text for b in resp.content if getattr(b, "type", None) == "text"]
         return "".join(parts).strip()
 
+    def vision(self, question: str, image_b64: str, media_type: str = "image/jpeg",
+               system: str = "", model: str | None = None) -> str:
+        """Answer a question about an image (base64, no data: prefix) via Claude vision."""
+        chosen = self._ALIASES.get(model or self.model, model or self.model)
+        resp = self.client.messages.create(
+            model=chosen,
+            max_tokens=1024,
+            system=system or "You are JARVIS. Describe what you see plainly and answer the user's question.",
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_b64}},
+                {"type": "text", "text": question or "What do you see?"},
+            ]}],
+        )
+        parts = [b.text for b in resp.content if getattr(b, "type", None) == "text"]
+        return "".join(parts).strip()
+
 
 class OpenAIProvider:
     name = "openai"

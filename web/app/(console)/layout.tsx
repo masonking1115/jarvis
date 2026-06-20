@@ -5,10 +5,12 @@ import { VoiceProvider } from "@/components/voice/VoiceProvider";
 import { VoiceIndicator } from "@/components/voice/VoiceIndicator";
 import { AmbientOrb } from "@/components/voice/AmbientOrb";
 import { ChatLauncherProvider, ChatOverlay } from "@/components/chat/ChatLauncher";
+import { CameraProvider } from "@/components/vision/CameraProvider";
 
 export default function ConsoleLayout({ children }: { children: React.ReactNode }) {
   return (
     <ChatLauncherProvider>
+      <CameraProvider>
       <VoiceProvider>
         <FlyoverProvider>
           <div className="flex min-h-screen grid-bg">
@@ -23,6 +25,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
         <VoiceIndicator />
       </VoiceProvider>
       <ChatOverlay />
+      </CameraProvider>
     </ChatLauncherProvider>
   );
 }
