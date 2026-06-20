@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     agent_search_model: str = "sonnet" # model for web-search synthesis (quality; ack hides latency)
     smart_model: str = "claude-opus-4-8"  # API model id for the "smart" tier (Opus)
     agent_model: str = "opus"             # CLI alias for the autonomous "agent" tier
+    agent_engine: str = "cli"      # cli (Max-plan CLI) | sdk (paid API; future phase)
+    agent_max_turns: int = 30      # cap the agent's autonomous loop per turn
 
     database_url: str = "sqlite:///./data/jarvis.db"
     cors_origins: str = "http://localhost:3000"
