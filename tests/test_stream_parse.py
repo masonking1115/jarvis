@@ -56,3 +56,24 @@ def test_parse_real_fixture_ends_with_done():
         return  # spike fixture optional in CI
     events = list(parse_stream_lines(fx.read_text(encoding="utf-8").splitlines()))
     assert events and events[-1]["type"] == "done"
+
+
+def test_parse_emits_session_from_init():
+    lines = [
+        '{"type":"system","subtype":"init","session_id":"abc-123","model":"sonnet"}',
+        '{"type":"assistant","message":{"content":[{"type":"text","text":"hi"}]}}',
+        '{"type":"result","result":"hi"}',
+    ]
+    events = list(parse_stream_lines(iter(lines)))
+    assert {"type": "session", "session_id": "abc-123"} in events
+    assert events[-1]["type"] == "done"
+
+
+def test_parse_ignores_non_init_system_events():
+    # hook events also carry session_id but must NOT emit a session event
+    lines = [
+        '{"type":"system","subtype":"hook_started","session_id":"x"}',
+        '{"type":"result","result":"ok"}',
+    ]
+    events = list(parse_stream_lines(iter(lines)))
+    assert not any(e["type"] == "session" for e in events)

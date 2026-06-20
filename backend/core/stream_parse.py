@@ -56,6 +56,8 @@ def parse_stream_lines(lines: Iterable[str]) -> Iterator[dict]:
             if delta.get("type") == "text_delta" and delta.get("text"):
                 saw_delta = True
                 yield {"type": "text", "text": delta["text"]}
+        elif etype == "system" and ev.get("subtype") == "init" and ev.get("session_id"):
+            yield {"type": "session", "session_id": ev["session_id"]}
         elif etype == "result":
             final = ev.get("result") or final
     yield {"type": "done", "text": final}
