@@ -45,3 +45,9 @@ def test_smart_tier_uses_smart_model(db, monkeypatch):
     out = svc.plan(db, [{"role": "user", "content": "think about x"}], tier="smart")
     assert out == {"kind": "reply", "text": "a thoughtful answer"}
     assert fake.seen["model"] == svc.settings.smart_model
+
+
+def test_plan_instruction_mentions_code_escalation():
+    # The router prompt must tell the model to escalate code/project questions.
+    assert "code" in svc._PLAN_INSTRUCTION.lower()
+    assert "escalate" in svc._PLAN_INSTRUCTION.lower()

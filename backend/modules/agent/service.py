@@ -21,7 +21,9 @@ _PLAN_INSTRUCTION = (
     '- Specialized skill: {"kind":"skill","name":"<one of the skill names>"}\n'
     '- Escalate: {"kind":"escalate","reason":"<why>"} — use when the request needs '
     "multiple steps, reading files or the user's own data, web research plus synthesis, "
-    "or deep analysis a single reply can't do well.\n"
+    "deep analysis a single reply can't do well, OR anything about the code, repository, "
+    "files, building, running, testing, or debugging this project (read the actual files "
+    "with the agent — never guess about the codebase).\n"
     "Prefer a skill when the request matches its description; an action when it matches one; "
     "escalate for genuinely hard/multi-step work; otherwise reply. If the user explicitly "
     "names a skill, use that skill.\n"
