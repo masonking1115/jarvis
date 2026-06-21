@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { chat, vision as visionApi, ChatTurn, projectsApi, Project, DiscoveredRepo } from "@/lib/api";
 import type { ChatEvent } from "@/lib/sseParse";
 import { useCamera } from "@/components/vision/CameraProvider";
+import { renderMarkdown } from "@/lib/markdown";
 
 type Todo = { content: string; status: string };
 const TIERS = ["fast", "smart", "agent"] as const;
@@ -297,7 +298,9 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
         )}
         {messages.map((m, i) => (
           <div key={i} className={`text-sm ${m.role === "user" ? "text-right" : ""}`}>
-            <div className={`inline-block px-3 py-2 rounded-2xl max-w-[85%] whitespace-pre-wrap ${m.role === "user" ? "bg-[#4ad6ff]/20 text-white" : "bg-white/5"}`}>{m.content}</div>
+            <div className={`inline-block px-3 py-2 rounded-2xl max-w-[85%] ${m.role === "user" ? "bg-[#4ad6ff]/20 text-white whitespace-pre-wrap" : "bg-white/5"}`}>
+              {m.role === "user" ? m.content : renderMarkdown(m.content)}
+            </div>
           </div>
         ))}
         {(streaming || todos.length > 0 || tools.length > 0 || (busy && activity)) && (

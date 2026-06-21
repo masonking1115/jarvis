@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useRef, useState, ReactNode } fro
 import { useRouter } from "next/navigation";
 import { agent, voice as voiceApi, vision as visionApi } from "@/lib/api";
 import { useCamera } from "@/components/vision/CameraProvider";
+import { stripMarkdown } from "@/lib/markdown";
 import { createRecognizer, extractCommand, speechSupported, wantsDeep, Recognizer } from "@/lib/voice";
 import { createAzureRecognizer } from "@/lib/azureStt";
 
@@ -208,10 +209,12 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   // utterance of a turn re-enters conversation mode (so an ack doesn't).
   function speak(text: string, opts?: { final?: boolean }): Promise<void> {
     const final = opts?.final !== false;
+    const clean = stripMarkdown(text);   // don't read markdown symbols aloud / in the caption
+    setLastSpoken(clean);
     return new Promise<void>((resolve) => {
       (async () => {
         set("speaking");
-        const url = await voiceApi.tts(text).catch(() => null);
+        const url = await voiceApi.tts(clean).catch(() => null);
         const finish = () => {
           speakAnalyserRef.current = null; stopAudio();
           if (final) { if (enabledRef.current) beginCapture(); else set("idle"); }
