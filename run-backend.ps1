@@ -5,6 +5,11 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 
+# Ensure GitHub CLI is reachable (so JARVIS's agent can run `gh`) even if this
+# shell predates the install and has a stale PATH.
+$ghDir = "C:\Program Files\GitHub CLI"
+if ((Test-Path $ghDir) -and ($env:Path -notlike "*$ghDir*")) { $env:Path = "$ghDir;$env:Path" }
+
 if (-not (Test-Path ".venv")) {
     Write-Host "No .venv found. Run .\setup.ps1 first." -ForegroundColor Yellow
     exit 1

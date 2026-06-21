@@ -156,14 +156,27 @@ class ClaudeCliProvider:
         import os
         return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+    def _agent_env(self) -> dict:
+        """Env for agent subprocesses: strip the API key (Max plan) and ensure common
+        tool dirs (e.g. GitHub CLI) are on PATH — a backend launched from a shell with a
+        stale PATH may not inherit a freshly-installed tool, so we add it explicitly."""
+        import os
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
+        path = env.get("PATH", "")
+        for d in (r"C:\Program Files\GitHub CLI",
+                  os.path.join(os.environ.get("LOCALAPPDATA", ""), r"Microsoft\WinGet\Links")):
+            if d and os.path.isdir(d) and d.lower() not in path.lower():
+                path = d + os.pathsep + path
+        env["PATH"] = path
+        return env
+
     def agent_text(self, prompt: str, context: str = "", model: str | None = None,
                    timeout: int = 180, cwd: str | None = None) -> str:
         """Non-streaming autonomous agent run (used by voice). Full toolset, no gates."""
         if not self.available:
             raise RuntimeError("claude CLI not found on PATH")
-        import os
-        env = {k: v for k, v in os.environ.items()
-               if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
+        env = self._agent_env()
         cmd = [self.path, "-p", prompt, "--output-format", "text",
                "--permission-mode", "acceptEdits",
                "--max-turns", str(settings.agent_max_turns),
@@ -188,9 +201,7 @@ class ClaudeCliProvider:
             yield {"type": "text", "text": "The agent is unavailable, sir."}
             yield {"type": "done", "text": ""}
             return
-        import os
-        env = {k: v for k, v in os.environ.items()
-               if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
+        env = self._agent_env()
         cmd = [self.path, "-p", prompt,
                "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                "--permission-mode", "acceptEdits",
