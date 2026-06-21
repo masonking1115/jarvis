@@ -100,7 +100,11 @@ def _apply_lightweight_migrations() -> None:
             ("agent_session_id", "VARCHAR(64) DEFAULT ''"),
             ("project_id", "INTEGER DEFAULT 0"),
         ],
-        "projects": [("repo_path", "VARCHAR(500)")],
+        "projects": [
+            ("repo_path", "VARCHAR(500)"),
+            ("status_summary", "VARCHAR(2000)"),
+            ("last_active_at", "DATETIME"),
+        ],
         "chat_turns": [("project_id", "INTEGER DEFAULT 0")],
     }
     with engine.begin() as conn:
