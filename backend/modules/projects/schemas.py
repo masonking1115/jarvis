@@ -28,3 +28,5 @@ class ProjectOut(ProjectBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     created_at: datetime
+    status_summary: str | None = None
+    last_active_at: datetime | None = None
