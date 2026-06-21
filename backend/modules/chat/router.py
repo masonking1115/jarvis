@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -17,6 +18,7 @@ from backend.modules.profile import storage as profile_storage
 from backend.modules.profile.extract import extract_in_background
 from backend.modules.chat import store
 from backend.modules.chat.models import get_state
+from backend.modules.projects.models import Project
 
 
 router = APIRouter()
@@ -193,9 +195,9 @@ def _summarize(messages: list[dict]) -> str:
 
 
 @router.get("/thread")
-def thread(db: Session = Depends(get_db)):
-    state = get_state(db)
-    turns = store.load_turns(db)
+def thread(project_id: int = 0, db: Session = Depends(get_db)):
+    state = get_state(db, project_id)
+    turns = store.load_turns(db, project_id)
     messages = []
     if state.compaction_summary:
         messages.append({"role": "assistant",
@@ -210,25 +212,25 @@ def thread(db: Session = Depends(get_db)):
 
 
 @router.post("/model")
-def set_model(body: ModelIn, db: Session = Depends(get_db)):
-    state = get_state(db)
+def set_model(body: ModelIn, project_id: int = 0, db: Session = Depends(get_db)):
+    state = get_state(db, project_id)
     state.tier = body.tier
     db.commit()
     return {"tier": state.tier}
 
 
 @router.post("/mode")
-def set_mode(body: ModeIn, db: Session = Depends(get_db)):
-    state = get_state(db)
+def set_mode(body: ModeIn, project_id: int = 0, db: Session = Depends(get_db)):
+    state = get_state(db, project_id)
     state.mode = body.mode
     db.commit()
     return {"mode": state.mode}
 
 
 @router.post("/compact")
-def compact(db: Session = Depends(get_db)):
-    summary = _summarize(store.thread_messages(db)) or "(nothing to summarize yet)"
-    store.compact(db, summary)
+def compact(project_id: int = 0, db: Session = Depends(get_db)):
+    summary = _summarize(store.thread_messages(db, project_id)) or "(nothing to summarize yet)"
+    store.compact(db, summary, project_id)
     return {"summary": summary}
 
 
@@ -237,9 +239,22 @@ class StreamIn(BaseModel):
     tier: str | None = None   # overrides the sticky tier for this message
 
 
-def _agent_stream(prompt: str, context: str = "", session_id: str | None = None, **kw):
+def _notion_instructions(proj: "Project") -> str:
+    parent = settings.notion_parent_page
+    where = (f"This project's Notion documentation page is {proj.notion_url}."
+             if proj.notion_url else
+             f"This project has no Notion page yet. Create a Notion page titled '{proj.name}' as a CHILD "
+             f"of the page with id {parent}, then output its URL on its own line exactly as 'NOTION_URL: <url>'.")
+    return ("## Notion documentation log\n"
+            f"You are building the project '{proj.name}'. Keep a Notion doc log for it. {where}\n"
+            "After your work this turn, append a dated bullet (what you did, what's next) to that page and "
+            "refresh a short 'Current status' summary at the top.\n"
+            f"NEVER create, edit, move, or delete the parent page {parent} or any page outside this project's own page.")
+
+
+def _agent_stream(prompt: str, context: str = "", session_id: str | None = None, cwd: str | None = None, **kw):
     """Indirection so tests can monkeypatch the CLI streaming call."""
-    yield from ClaudeCliProvider().agent_stream(prompt, context=context, session_id=session_id)
+    yield from ClaudeCliProvider().agent_stream(prompt, context=context, session_id=session_id, cwd=cwd)
 
 
 def _sse(event: dict) -> str:
@@ -247,15 +262,15 @@ def _sse(event: dict) -> str:
 
 
 @router.post("/stream")
-def stream(body: StreamIn):
+def stream(body: StreamIn, project_id: int = 0):
     # Own session: a StreamingResponse outlives the request scope, so we manage it here.
     def gen():
         db = SessionLocal()
         try:
-            store.add_turn(db, "user", body.text)
-            state = get_state(db)
+            store.add_turn(db, "user", body.text, project_id=project_id)
+            state = get_state(db, project_id)
             tier = body.tier or state.tier
-            msgs = store.thread_messages(db)
+            msgs = store.thread_messages(db, project_id)
             # Give the chat planner the data snapshot so fast/smart tiers can answer
             # data questions ("what's my monthly expenditure?") instead of punting.
             result = service.plan(db, msgs, tier=tier, extra_context=_build_context(db))
@@ -269,9 +284,13 @@ def stream(body: StreamIn):
                 kind = "escalate"
 
             if kind == "escalate" or tier == "agent":
+                proj = db.get(Project, project_id) if project_id else None
+                cwd = proj.repo_path if (proj and proj.repo_path) else None
                 prompt = "\n\n".join(f"{m['role']}: {m['content']}" for m in msgs)
                 context = f"{load_persona()}\n\n{_build_context(db)}"
-                for ev in _agent_stream(prompt, context=context, session_id=state.agent_session_id or None):
+                if proj and proj.repo_path:
+                    context += "\n\n" + _notion_instructions(proj)
+                for ev in _agent_stream(prompt, context=context, session_id=state.agent_session_id or None, cwd=cwd):
                     if ev["type"] == "session":
                         state.agent_session_id = ev["session_id"]
                         db.commit()
@@ -281,6 +300,11 @@ def stream(body: StreamIn):
                     elif ev["type"] == "todos":
                         todos = ev["todos"]
                     yield _sse(ev)
+                if proj and not proj.notion_url:
+                    mm = re.search(r"NOTION_URL:\s*(\S+)", assistant_text)
+                    if mm:
+                        proj.notion_url = mm.group(1); db.commit()
+                assistant_text = re.sub(r"\n?NOTION_URL:\s*\S+", "", assistant_text).strip()
             elif kind == "action":
                 out = service.run(db, result["tool"], result.get("args"))
                 assistant_text = out.get("text", "")
@@ -293,7 +317,7 @@ def stream(body: StreamIn):
                 yield _sse({"type": "text", "text": assistant_text})
                 yield _sse({"type": "done", "text": assistant_text})
 
-            store.add_turn(db, "assistant", assistant_text, tier=tier)
+            store.add_turn(db, "assistant", assistant_text, tier=tier, project_id=project_id)
         except Exception:  # noqa: BLE001 — never leak; close the stream cleanly
             yield _sse({"type": "error", "text": "I ran into a problem with that, sir."})
             yield _sse({"type": "done", "text": ""})

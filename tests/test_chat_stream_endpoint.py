@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from backend.core.db import Base, get_db
 import backend.modules.chat.router as cr
+import backend.modules.projects.models  # ensure Project registers with Base.metadata before create_all
 
 
 @pytest.fixture
@@ -70,7 +71,7 @@ def test_stream_agent_persists_session_and_hides_it(ctx, monkeypatch):
     monkeypatch.setattr(cr.service, "plan",
                         lambda db, msgs, skill=None, tier=None, extra_context=None: {"kind": "escalate", "reason": "x"})
     seen = {}
-    def fake_stream(prompt, context="", session_id=None):
+    def fake_stream(prompt, context="", session_id=None, cwd=None):
         seen["session_id"] = session_id
         yield {"type": "session", "session_id": "sid-77"}
         yield {"type": "text", "text": "working"}
@@ -84,3 +85,25 @@ def test_stream_agent_persists_session_and_hides_it(ctx, monkeypatch):
     # persisted for next turn
     from backend.modules.chat.models import get_state
     assert get_state(TestingSession()).agent_session_id == "sid-77"
+
+
+def test_stream_scopes_project_and_captures_notion_url(ctx, monkeypatch):
+    client, TS = ctx
+    # seed a buildable project (id 1) with a repo_path
+    from backend.modules.projects.models import Project
+    db = TS(); proj = Project(name="Demo", repo_path="."); db.add(proj); db.commit(); pid = proj.id
+    monkeypatch.setattr(cr.service, "plan",
+        lambda db, msgs, skill=None, tier=None, extra_context=None: {"kind": "escalate", "reason": "x"})
+    seen = {}
+    def fake_stream(prompt, context="", session_id=None, cwd=None):
+        seen["cwd"] = cwd; seen["ctx"] = context
+        yield {"type": "text", "text": "did work\nNOTION_URL: https://notion.so/p/abc"}
+        yield {"type": "done", "text": ""}
+    monkeypatch.setattr(cr, "_agent_stream", fake_stream)
+
+    r = client.post(f"/api/chat/stream?project_id={pid}", json={"text": "build it", "tier": "agent"})
+    assert "did work" in r.text and "NOTION_URL" not in r.text.split("data:")[-1]  # stripped from final
+    db2 = TS(); saved = db2.get(Project, pid)
+    assert saved.notion_url == "https://notion.so/p/abc"          # captured
+    assert seen["cwd"] == "."                                      # ran in the project repo
+    assert "Notion documentation log" in seen["ctx"]              # instructions injected
