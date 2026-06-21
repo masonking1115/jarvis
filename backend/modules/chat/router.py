@@ -17,7 +17,7 @@ from backend.modules.finance.models import Asset, Liability, Transaction
 from backend.modules.profile import storage as profile_storage
 from backend.modules.profile.extract import extract_in_background
 from backend.modules.chat import store
-from backend.modules.chat.models import get_state
+from backend.modules.chat.models import get_state, ChatTurn
 from backend.modules.projects.models import Project
 
 
@@ -138,6 +138,23 @@ def _build_context(db: Session) -> str:
         for t in recent:
             sign = "-" if t.amount < 0 else "+"
             lines.append(f"  - {t.occurred_at.date()} {sign}${abs(t.amount):,.0f} {t.category}")
+    # Projects rollup (manager view): each non-done project's latest status, so
+    # General JARVIS can answer "what's happening across my projects?" locally.
+    proj_rows = (db.query(Project).filter(Project.status != "done")
+                 .order_by(Project.last_active_at.desc()).limit(12).all())
+    if proj_rows:
+        lines += ["", "## Projects"]
+        for p in proj_rows:
+            la = f" — last active {p.last_active_at.date()}" if p.last_active_at else ""
+            lines.append(f"- {p.name} ({p.status}){la}")
+            summary = p.status_summary
+            if not summary:
+                last = (db.query(ChatTurn)
+                        .filter(ChatTurn.project_id == p.id, ChatTurn.role == "assistant")
+                        .order_by(ChatTurn.id.desc()).first())
+                summary = (last.content[:200] + "…") if last and last.content else ""
+            if summary:
+                lines.append(f"  {summary}")
     facts = profile_storage.get_context(db)
     if facts:
         lines += ["", facts]
