@@ -36,3 +36,33 @@ def test_estimate_tokens():
     store.add_turn(db, "user", "x" * 40, project_id=7)
     store.add_turn(db, "assistant", "y" * 40, project_id=7)
     assert store.estimate_tokens(db, 7) == 20           # 80 chars // 4
+
+
+def test_compact_with_status_writes_project_summary():
+    from backend.modules.chat import store
+    from backend.modules.projects.models import Project
+    db = _db()
+    p = Project(name="Demo"); db.add(p); db.commit()
+    store.add_turn(db, "user", "hello", project_id=p.id)
+    store.compact_with_status(db, "the summary", p.id)
+    assert db.get(Project, p.id).status_summary == "the summary"
+    from backend.modules.chat.models import get_state
+    assert get_state(db, p.id).compaction_summary == "the summary"
+    assert store.load_turns(db, p.id) == []                  # turns cleared
+
+
+def test_maybe_autocompact_threshold():
+    from backend.modules.chat import store
+    from backend.modules.projects.models import Project
+    db = _db()
+    p = Project(name="Demo"); db.add(p); db.commit()
+    calls = {"n": 0}
+    def fake_sum(msgs): calls["n"] += 1; return "SUM"
+
+    store.add_turn(db, "user", "short", project_id=p.id)
+    assert store.maybe_autocompact(db, p.id, fake_sum) is False   # under threshold
+    assert calls["n"] == 0
+
+    store.add_turn(db, "assistant", "z" * 250_000, project_id=p.id)  # >50k tokens
+    assert store.maybe_autocompact(db, p.id, fake_sum) is True
+    assert db.get(Project, p.id).status_summary == "SUM"
