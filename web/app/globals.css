@@ -18,6 +18,14 @@ html, body {
   letter-spacing: 0.005em;
 }
 
+/* Native <select> dropdown option lists: force a dark, high-contrast popup so the
+   options are readable (some browsers render the open list on white otherwise). */
+select option,
+select optgroup {
+  background-color: #0b1426;
+  color: #eaf4ff;
+}
+
 * { scrollbar-width: thin; scrollbar-color: #1a3458 transparent; }
 
 /* ------------ panel / card primitives ------------- */
