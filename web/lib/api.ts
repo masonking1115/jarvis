@@ -35,7 +35,8 @@ export type Event = {
 };
 export type Workout = { id: number; kind: string; duration_min: number; distance_mi: number|null; notes: string|null; performed_at: string };
 export type Txn = { id: number; amount: number; category: string; description: string|null; occurred_at: string; source: string; external_id: string|null };
-export type Project = { id: number; name: string; status: string; progress: number; notion_url: string|null; notes: string|null; created_at: string };
+export type Project = { id: number; name: string; status: string; progress: number; notion_url: string|null; notes: string|null; repo_path: string|null; created_at: string };
+export type DiscoveredRepo = { name: string; path: string };
 
 export type IncomeSource = {
   id: number;
@@ -271,6 +272,12 @@ export const skills = {
             api.patch<{ name: string; enabled: boolean }>(`/api/skills/${name}`, { enabled }),
 };
 
+export const projectsApi = {
+  list:        ()                                    => api.get<Project[]>("/api/projects"),
+  discover:    ()                                    => api.get<DiscoveredRepo[]>("/api/projects/discover"),
+  setRepoPath: (id: number, repo_path: string)       => api.patch<Project>(`/api/projects/${id}`, { repo_path }),
+};
+
 // ---- Flyover (photoreal address view) ----
 export type FlyoverConfig = {
   available: boolean;
@@ -353,13 +360,13 @@ export type ChatTurn = { role: "user" | "assistant"; content: string; tier: stri
 export type ChatThread = { messages: ChatTurn[]; tier: string; mode: string };
 
 export const chat = {
-  thread:  ()                 => api.get<ChatThread>("/api/chat/thread"),
-  setTier: (tier: string)     => api.post<{ tier: string }>("/api/chat/model", { tier }),
-  setMode: (mode: string)     => api.post<{ mode: string }>("/api/chat/mode", { mode }),
-  compact: ()                 => api.post<{ summary: string }>("/api/chat/compact", {}),
+  thread:  (projectId = 0)            => api.get<ChatThread>(`/api/chat/thread?project_id=${projectId}`),
+  setTier: (tier: string, projectId = 0) => api.post<{ tier: string }>(`/api/chat/model?project_id=${projectId}`, { tier }),
+  setMode: (mode: string, projectId = 0) => api.post<{ mode: string }>(`/api/chat/mode?project_id=${projectId}`, { mode }),
+  compact: (projectId = 0)            => api.post<{ summary: string }>(`/api/chat/compact?project_id=${projectId}`, {}),
   // Stream a message; calls onEvent for each parsed ChatEvent until "done".
-  async stream(text: string, tier: string | undefined, onEvent: (e: ChatEvent) => void, signal?: AbortSignal): Promise<void> {
-    const res = await fetch("/api/chat/stream", {
+  async stream(text: string, tier: string | undefined, onEvent: (e: ChatEvent) => void, signal?: AbortSignal, projectId = 0): Promise<void> {
+    const res = await fetch(`/api/chat/stream?project_id=${projectId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, tier }),
