@@ -29,3 +29,10 @@ def test_compact_replaces_turns_with_summary(db):
     assert get_state(db).compaction_summary == "we discussed a and b"
     msgs = store.thread_messages(db)
     assert msgs[0]["role"] == "assistant" and "we discussed a and b" in msgs[0]["content"]
+
+
+def test_turns_isolated_by_project(db):
+    store.add_turn(db, "user", "in P1", project_id=1)
+    store.add_turn(db, "user", "in P0", project_id=0)
+    assert [m["content"] for m in store.thread_messages(db, 1)] == ["in P1"]
+    assert [m["content"] for m in store.thread_messages(db, 0)] == ["in P0"]
