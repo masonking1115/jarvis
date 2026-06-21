@@ -283,6 +283,19 @@ def stream(body: StreamIn, project_id: int = 0):
             if kind == "action" and result.get("tool") in ("navigate", "open_flyover"):
                 kind = "escalate"
 
+            # A non-General project with no repo attached has no workspace for the
+            # agent to act in — running it just flails. Reply with setup guidance
+            # instead of escalating.
+            if (kind == "escalate" or tier == "agent") and project_id:
+                proj0 = db.get(Project, project_id)
+                if not proj0 or not proj0.repo_path:
+                    msg = ("This project has no repo attached yet, sir. Use “+ Add project” to point me "
+                           "at its folder; I'll then build in it and keep its docs in Notion.")
+                    yield _sse({"type": "text", "text": msg})
+                    yield _sse({"type": "done", "text": msg})
+                    store.add_turn(db, "assistant", msg, tier=tier, project_id=project_id)
+                    return
+
             if kind == "escalate" or tier == "agent":
                 proj = db.get(Project, project_id) if project_id else None
                 cwd = proj.repo_path if (proj and proj.repo_path) else None

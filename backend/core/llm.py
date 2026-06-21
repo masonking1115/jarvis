@@ -207,12 +207,31 @@ class ClaudeCliProvider:
             text=True, encoding="utf-8", errors="replace",
             env=env, cwd=cwd or self._project_cwd(),
         )
+        # Hard wall-clock cap: kill the run if it exceeds `timeout` so it can never
+        # hang the request forever (a flailing agent otherwise streams until max-turns).
+        import threading
+        timed_out = {"v": False}
+        def _kill_on_timeout():
+            timed_out["v"] = True
+            try: proc.kill()
+            except Exception:  # noqa: BLE001
+                pass
+        watchdog = threading.Timer(timeout, _kill_on_timeout)
+        watchdog.daemon = True
+        watchdog.start()
         try:
-            yield from parse_stream_lines(proc.stdout)
+            for ev in parse_stream_lines(proc.stdout):
+                if ev.get("type") == "done":
+                    break          # emit our own terminal done below (after any timeout note)
+                yield ev
+            if timed_out["v"]:
+                yield {"type": "text", "text": "\n\n(Stopped — that was taking too long, sir.)"}
+            yield {"type": "done", "text": ""}
         except Exception:  # noqa: BLE001 — never leak; close cleanly
             yield {"type": "text", "text": "I ran into a problem with that, sir."}
             yield {"type": "done", "text": ""}
         finally:
+            watchdog.cancel()
             try:
                 proc.kill()
             except Exception:  # noqa: BLE001

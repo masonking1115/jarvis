@@ -14,6 +14,18 @@ const SLASH = [
 ];
 const todoIcon = (s: string) => (s === "completed" ? "✓" : s === "in_progress" ? "◐" : "○");
 
+// Friendly "what the agent is doing" label from a tool name.
+function agentActivity(toolName: string): string {
+  const n = (toolName || "").toLowerCase();
+  if (n.includes("notion")) return "Reading & updating Notion…";
+  if (n.includes("websearch") || n.includes("webfetch")) return "Searching the web…";
+  if (n === "bash") return "Running a command…";
+  if (n === "read" || n === "grep" || n === "glob") return "Reading the project…";
+  if (n === "edit" || n === "write") return "Editing files…";
+  if (n === "todowrite") return "Planning the work…";
+  return `Using ${toolName}…`;
+}
+
 // ---- Add-project drawer ----
 function AddProjectDrawer({
   projects,
@@ -123,6 +135,7 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [tools, setTools] = useState<string[]>([]);
   const [note, setNote] = useState("");
+  const [activity, setActivity] = useState("");   // live "what the agent is doing" status
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -214,13 +227,13 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
 
     const controller = new AbortController();
     abortRef.current = controller;
-    setBusy(true); setStreaming(""); setTodos([]); setTools([]);
+    setBusy(true); setStreaming(""); setTodos([]); setTools([]); setActivity("Thinking…");
     let acc = "";
     const onEvent = (ev: ChatEvent) => {
-      if (ev.type === "text") { acc += ev.text; setStreaming(acc); }
-      else if (ev.type === "todos") setTodos(ev.todos);
-      else if (ev.type === "tool") setTools(t => [...t, ev.summary]);
-      else if (ev.type === "error") { acc += ev.text; setStreaming(acc); }
+      if (ev.type === "text") { acc += ev.text; setStreaming(acc); setActivity(""); }
+      else if (ev.type === "todos") { setTodos(ev.todos); setActivity("Planning the work…"); }
+      else if (ev.type === "tool") { setTools(t => [...t, ev.summary]); setActivity(agentActivity(ev.name)); }
+      else if (ev.type === "error") { acc += ev.text; setStreaming(acc); setActivity(""); }
     };
     try {
       await chat.stream(text, tier, onEvent, controller.signal, projectId);
@@ -229,7 +242,7 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
       // Aborted (spacebar / click-outside): keep whatever streamed so far.
       const stopped = err?.name === "AbortError";
       setMessages(m => [...m, { role: "assistant", content: stopped ? (acc || "(stopped)") : `Error: ${err.message}`, tier }]);
-    } finally { abortRef.current = null; setBusy(false); setStreaming(""); setTodos([]); setTools([]); }
+    } finally { abortRef.current = null; setBusy(false); setStreaming(""); setTodos([]); setTools([]); setActivity(""); }
   }
 
   const activeProject = projectId === 0 ? null : projects.find(p => p.id === projectId);
@@ -287,8 +300,14 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
             <div className={`inline-block px-3 py-2 rounded-2xl max-w-[85%] whitespace-pre-wrap ${m.role === "user" ? "bg-[#4ad6ff]/20 text-white" : "bg-white/5"}`}>{m.content}</div>
           </div>
         ))}
-        {(streaming || todos.length > 0 || tools.length > 0) && (
+        {(streaming || todos.length > 0 || tools.length > 0 || (busy && activity)) && (
           <div className="text-sm space-y-2">
+            {busy && activity && !streaming && (
+              <div className="flex items-center gap-2 text-[12px] text-[#9fe6ff]">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#4ad6ff] animate-pulse" />
+                {activity}
+              </div>
+            )}
             {todos.length > 0 && (
               <div className="rounded-xl border border-[#4ad6ff]/20 bg-white/5 p-3 space-y-1">
                 <div className="text-xs uppercase tracking-wide text-jarvis-muted">Working</div>

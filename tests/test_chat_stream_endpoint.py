@@ -87,6 +87,19 @@ def test_stream_agent_persists_session_and_hides_it(ctx, monkeypatch):
     assert get_state(TestingSession()).agent_session_id == "sid-77"
 
 
+def test_stream_unconfigured_project_gives_setup_guidance(ctx, monkeypatch):
+    client, TS = ctx
+    from backend.modules.projects.models import Project
+    db = TS(); p = Project(name="NoRepo"); db.add(p); db.commit(); pid = p.id
+    monkeypatch.setattr(cr.service, "plan",
+        lambda db, msgs, skill=None, tier=None, extra_context=None: {"kind": "escalate", "reason": "x"})
+    def _boom(*a, **k):
+        raise AssertionError("agent must NOT run for a project with no repo_path")
+    monkeypatch.setattr(cr, "_agent_stream", _boom)
+    r = client.post(f"/api/chat/stream?project_id={pid}", json={"text": "hi", "tier": "agent"})
+    assert "no repo attached" in r.text   # setup guidance, agent never invoked
+
+
 def test_stream_scopes_project_and_captures_notion_url(ctx, monkeypatch):
     client, TS = ctx
     # seed a buildable project (id 1) with a repo_path
