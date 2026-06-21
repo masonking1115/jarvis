@@ -27,3 +27,12 @@ def test_project_has_status_fields():
 def test_compact_threshold_default():
     from backend.core.config import settings
     assert settings.compact_token_threshold == 50_000
+
+
+def test_estimate_tokens():
+    from backend.modules.chat import store
+    db = _db()
+    assert store.estimate_tokens(db, 7) == 0           # empty thread
+    store.add_turn(db, "user", "x" * 40, project_id=7)
+    store.add_turn(db, "assistant", "y" * 40, project_id=7)
+    assert store.estimate_tokens(db, 7) == 20           # 80 chars // 4

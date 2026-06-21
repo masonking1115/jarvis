@@ -24,6 +24,11 @@ def thread_messages(db, project_id: int = 0) -> list[dict]:
     return msgs
 
 
+def estimate_tokens(db, project_id: int = 0) -> int:
+    """Rough token count for the thread (chars/4 over turns + any compaction summary)."""
+    return sum(len(m["content"]) for m in thread_messages(db, project_id)) // 4
+
+
 def compact(db, summary: str, project_id: int = 0) -> None:
     state = get_state(db, project_id)
     state.compaction_summary = summary
