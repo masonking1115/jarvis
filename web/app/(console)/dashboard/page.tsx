@@ -329,6 +329,11 @@ function ProjectsBlock({ projects }: { projects: Project[] }) {
                 {inner}
               </div>
             )}
+            {p.status_summary && (
+              <p className="mt-0.5 text-[11px] leading-snug text-jarvis-muted line-clamp-2">
+                {p.status_summary}
+              </p>
+            )}
           </li>
         );
       })}
