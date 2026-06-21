@@ -120,3 +120,21 @@ def test_stream_scopes_project_and_captures_notion_url(ctx, monkeypatch):
     assert saved.notion_url == "https://notion.so/p/abc"          # captured
     assert seen["cwd"] == "."                                      # ran in the project repo
     assert "Notion documentation log" in seen["ctx"]              # instructions injected
+
+
+def test_stream_bumps_last_active_and_autocompacts(ctx, monkeypatch):
+    client, TS = ctx
+    from backend.modules.projects.models import Project
+    from backend.modules.chat import store
+    db = TS(); proj = Project(name="Demo", repo_path="."); db.add(proj); db.commit(); pid = proj.id
+    # Pre-fill a huge thread so the post-turn estimate is over threshold.
+    store.add_turn(db, "assistant", "z" * 250_000, project_id=pid)
+    monkeypatch.setattr(cr.service, "plan",
+        lambda db, msgs, skill=None, tier=None, extra_context=None: {"kind": "reply", "text": "ok"})
+    monkeypatch.setattr(cr, "_summarize", lambda msgs: "ROLLUP")
+
+    r = client.post(f"/api/chat/stream?project_id={pid}", json={"text": "hi"})
+    assert r.status_code == 200
+    saved = TS().get(Project, pid)
+    assert saved.last_active_at is not None        # bumped
+    assert saved.status_summary == "ROLLUP"        # auto-compacted -> status written

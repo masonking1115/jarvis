@@ -230,7 +230,7 @@ def set_mode(body: ModeIn, project_id: int = 0, db: Session = Depends(get_db)):
 @router.post("/compact")
 def compact(project_id: int = 0, db: Session = Depends(get_db)):
     summary = _summarize(store.thread_messages(db, project_id)) or "(nothing to summarize yet)"
-    store.compact(db, summary, project_id)
+    store.compact_with_status(db, summary, project_id)
     return {"summary": summary}
 
 
@@ -331,6 +331,14 @@ def stream(body: StreamIn, project_id: int = 0):
                 yield _sse({"type": "done", "text": assistant_text})
 
             store.add_turn(db, "assistant", assistant_text, tier=tier, project_id=project_id)
+            if project_id:
+                proj_t = db.get(Project, project_id)
+                if proj_t:
+                    proj_t.last_active_at = datetime.utcnow(); db.commit()
+            try:
+                store.maybe_autocompact(db, project_id, _summarize)
+            except Exception:  # noqa: BLE001 — best-effort; response already sent
+                pass
         except Exception:  # noqa: BLE001 — never leak; close the stream cleanly
             yield _sse({"type": "error", "text": "I ran into a problem with that, sir."})
             yield _sse({"type": "done", "text": ""})
