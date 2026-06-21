@@ -34,3 +34,10 @@ def test_chat_state_has_agent_session_id(db):
     s.agent_session_id = "sid-42"
     db.commit()
     assert get_state(db).agent_session_id == "sid-42"
+
+
+def test_state_is_per_project(db):
+    s0 = get_state(db, 0); s1 = get_state(db, 1)
+    assert s0.project_id == 0 and s1.project_id == 1 and s0.id != s1.id
+    s1.tier = "agent"; db.commit()
+    assert get_state(db, 0).tier == "fast" and get_state(db, 1).tier == "agent"
