@@ -41,3 +41,17 @@ def test_agent_stream_omits_resume_when_no_session(monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", _fake_popen(captured))
     list(p.agent_stream("hi"))
     assert "--resume" not in captured["cmd"]
+
+
+def test_agent_stream_uses_given_cwd_and_allows_notion(monkeypatch):
+    p = llm.ClaudeCliProvider.__new__(llm.ClaudeCliProvider)
+    p.path = "claude"; p.available = True; p.model = "sonnet"
+    captured = {}
+    class _P:
+        def __init__(self, cmd, **kw): captured["cmd"] = cmd; captured["cwd"] = kw.get("cwd"); self.stdout = iter(['{"type":"result","result":"ok"}']); self.returncode = 0
+        def wait(self, timeout=None): return 0
+        def kill(self): pass
+    monkeypatch.setattr(subprocess, "Popen", _P)
+    list(p.agent_stream("hi", cwd=r"C:\tmp\proj"))
+    assert captured["cwd"] == r"C:\tmp\proj"
+    assert any("notion-create-pages" in t for t in captured["cmd"])

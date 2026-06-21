@@ -9,7 +9,9 @@ from .stream_parse import parse_stream_lines
 # Tools the autonomous agent may use, and dangerous patterns it may never run.
 # Per-invocation flags (not a project settings.json) so interactive Claude Code
 # sessions in this repo stay unrestricted.
-_AGENT_ALLOWED = ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch", "TodoWrite"]
+_AGENT_ALLOWED = ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch", "TodoWrite",
+                  "mcp__claude_ai_Notion__notion-create-pages", "mcp__claude_ai_Notion__notion-fetch",
+                  "mcp__claude_ai_Notion__notion-update-page", "mcp__claude_ai_Notion__notion-search"]
 _AGENT_DISALLOWED = ["Bash(rm *)", "Bash(git push *)", "Bash(sudo *)", "Bash(curl *)",
                      "Bash(dd *)", "Bash(mkfs *)", "Bash(shutdown *)"]
 
@@ -155,7 +157,7 @@ class ClaudeCliProvider:
         return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     def agent_text(self, prompt: str, context: str = "", model: str | None = None,
-                   timeout: int = 180) -> str:
+                   timeout: int = 180, cwd: str | None = None) -> str:
         """Non-streaming autonomous agent run (used by voice). Full toolset, no gates."""
         if not self.available:
             raise RuntimeError("claude CLI not found on PATH")
@@ -172,14 +174,15 @@ class ClaudeCliProvider:
             cmd += ["--append-system-prompt", context]
         proc = subprocess.run(
             cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
-            env=env, cwd=self._project_cwd(), timeout=timeout,
+            env=env, cwd=cwd or self._project_cwd(), timeout=timeout,
         )
         if proc.returncode != 0:
             raise RuntimeError(f"agent run failed ({proc.returncode}): {proc.stderr[:300]}")
         return proc.stdout.strip().replace("&#65533;", "-")
 
     def agent_stream(self, prompt: str, context: str = "", model: str | None = None,
-                     session_id: str | None = None, timeout: int = 300):
+                     session_id: str | None = None, timeout: int = 300,
+                     cwd: str | None = None):
         """Streaming autonomous agent run (used by chat). Yields normalized events."""
         if not self.available:
             yield {"type": "text", "text": "The agent is unavailable, sir."}
@@ -202,7 +205,7 @@ class ClaudeCliProvider:
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True, encoding="utf-8", errors="replace",
-            env=env, cwd=self._project_cwd(),
+            env=env, cwd=cwd or self._project_cwd(),
         )
         try:
             yield from parse_stream_lines(proc.stdout)
