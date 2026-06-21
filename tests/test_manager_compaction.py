@@ -22,3 +22,8 @@ def test_project_has_status_fields():
     got = db.get(Project, p.id)
     assert got.status_summary == "did a thing"
     assert got.last_active_at == datetime(2026, 6, 20)
+
+
+def test_compact_threshold_default():
+    from backend.core.config import settings
+    assert settings.compact_token_threshold == 50_000

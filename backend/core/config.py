@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     agent_model: str = "opus"             # CLI alias for the autonomous "agent" tier
     agent_engine: str = "cli"      # cli (Max-plan CLI) | sdk (paid API; future phase)
     agent_max_turns: int = 30      # cap the agent's autonomous loop per turn
+    compact_token_threshold: int = 50_000  # est. tokens (chars/4) before a thread auto-compacts
 
     workspaces_root: str = r"C:\Users\mking\Downloads"   # scanned for git repos to build
     notion_parent_page: str = "385179b73be080c8acbad5a46fd18987"  # JARVIS page; agent logs under it
