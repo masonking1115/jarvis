@@ -8,6 +8,7 @@ class ProjectBase(BaseModel):
     progress: float = 0.0
     notion_url: str | None = None
     notes: str | None = None
+    repo_path: str | None = None
 
 
 class ProjectCreate(ProjectBase):
@@ -20,6 +21,7 @@ class ProjectUpdate(BaseModel):
     progress: float | None = None
     notion_url: str | None = None
     notes: str | None = None
+    repo_path: str | None = None
 
 
 class ProjectOut(ProjectBase):

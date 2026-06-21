@@ -99,6 +99,7 @@ def _apply_lightweight_migrations() -> None:
         "chat_state": [
             ("agent_session_id", "VARCHAR(64) DEFAULT ''"),
         ],
+        "projects": [("repo_path", "VARCHAR(500)")],
     }
     with engine.begin() as conn:
         for table, cols in additions.items():

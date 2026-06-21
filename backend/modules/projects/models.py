@@ -13,4 +13,5 @@ class Project(Base):
     progress: Mapped[float] = mapped_column(Float, default=0.0)
     notion_url: Mapped[str | None] = mapped_column(String(500), default=None)
     notes: Mapped[str | None] = mapped_column(String(2000), default=None)
+    repo_path: Mapped[str | None] = mapped_column(String(500), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
