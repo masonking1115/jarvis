@@ -13,6 +13,11 @@ const DEFAULT_RANGE = 200;    // meters from the point — frames the property
 const MIN_RANGE = 80, MAX_RANGE = 1200;
 const ORBIT_PITCH = -28;      // degrees below horizontal (oblique aerial)
 
+// When the device is detected in San Mateo, the flyover defaults here instead
+// of the configured (Atherton) default. Coords are the rooftop geocode of the
+// address, aligned with the photoreal 3D tiles.
+const SAN_MATEO = { lat: 37.5603258, lng: -122.3253155, label: "55 W 5th Ave, San Mateo" };
+
 type Loc = { lat: number; lng: number };
 
 // Browser geolocation (Wi-Fi/IP based on a laptop). Resolves null on denial/error/timeout.
@@ -130,9 +135,20 @@ export function Flyover({ open, onExit }: { open: boolean; onExit?: () => void }
       } catch (e) { setStatus("Could not load 3D tiles for this area"); }
       startOrbit(Cesium, viewer);
       goTo(loc, label);
+      detectSanMateo();   // if the device is in San Mateo, prefer 55 W 5th Ave
     })();
     return () => { cancelled = true; };
   }, [open]);
+
+  // Auto-detect on open: if the device location resolves to San Mateo, override
+  // the configured default with 55 W 5th Ave. Silent + best-effort — a denied
+  // permission, error, or a non-San-Mateo location just leaves the default.
+  async function detectSanMateo() {
+    const here = await getDevicePosition();
+    if (!here) return;
+    const label = (await flyover.reverse(here.lat, here.lng).catch(() => null))?.address || "";
+    if (/san mateo/i.test(label)) goTo(SAN_MATEO, SAN_MATEO.label);
+  }
 
   // poll weather every 10 min while open
   useEffect(() => {
