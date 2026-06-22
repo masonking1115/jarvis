@@ -2,12 +2,23 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { ChatPanel } from "./ChatPanel";
 
-const Ctx = createContext<{ open: boolean; setOpen: (v: boolean) => void }>({ open: false, setOpen: () => {} });
+const Ctx = createContext<{
+  open: boolean; setOpen: (v: boolean) => void;
+  pendingProjectId: number; openProject: (id: number) => void; clearPending: () => void;
+}>({ open: false, setOpen: () => {}, pendingProjectId: 0, openProject: () => {}, clearPending: () => {} });
 export const useChatLauncher = () => useContext(Ctx);
 
 export function ChatLauncherProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
-  return <Ctx.Provider value={{ open, setOpen }}>{children}</Ctx.Provider>;
+  const [pendingProjectId, setPendingProjectId] = useState(0);
+  // Open the chat already scoped to a project (e.g. "Build in chat" on /projects).
+  const openProject = (id: number) => { setPendingProjectId(id); setOpen(true); };
+  const clearPending = () => setPendingProjectId(0);
+  return (
+    <Ctx.Provider value={{ open, setOpen, pendingProjectId, openProject, clearPending }}>
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export function ChatOverlay() {

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { chat, vision as visionApi, ChatTurn, projectsApi, Project, DiscoveredRepo } from "@/lib/api";
 import type { ChatEvent } from "@/lib/sseParse";
 import { useCamera } from "@/components/vision/CameraProvider";
+import { useChatLauncher } from "@/components/chat/ChatLauncher";
 import { renderMarkdown } from "@/lib/markdown";
 
 type Todo = { content: string; status: string };
@@ -140,16 +141,19 @@ export function ChatPanel({ onClose }: { onClose?: () => void }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Project switcher state
-  const [projectId, setProjectId] = useState(0);
+  // Project switcher state — honor a pending project from the launcher
+  // ("Build in chat" on /projects), then clear it so a later manual open is General.
+  const launcher = useChatLauncher();
+  const [projectId, setProjectId] = useState(launcher.pendingProjectId);
   const [projects, setProjects] = useState<Project[]>([]);
   const [showAddProject, setShowAddProject] = useState(false);
 
   function stop() { abortRef.current?.abort(); }
 
-  // Load the project list on mount
+  // Load the project list on mount; consume any pending project the launcher set.
   useEffect(() => {
     projectsApi.list().then(setProjects).catch(() => {});
+    if (launcher.pendingProjectId) launcher.clearPending();
   }, []);
 
   // Load the thread for the active project
