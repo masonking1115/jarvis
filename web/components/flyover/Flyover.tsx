@@ -16,7 +16,7 @@ const ORBIT_PITCH = -28;      // degrees below horizontal (oblique aerial)
 // When the device is detected in San Mateo, the flyover defaults here instead
 // of the configured (Atherton) default. Coords are the rooftop geocode of the
 // address, aligned with the photoreal 3D tiles.
-const SAN_MATEO = { lat: 37.5603258, lng: -122.3253155, label: "55 W 5th Ave, San Mateo" };
+const SAN_MATEO = { lat: 37.5597561, lng: -122.3267179, label: "95 W 5th Ave, San Mateo" };
 
 type Loc = { lat: number; lng: number };
 
