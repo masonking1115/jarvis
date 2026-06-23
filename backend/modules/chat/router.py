@@ -300,14 +300,14 @@ def stream(body: StreamIn, project_id: int = 0):
             if kind == "action" and result.get("tool") in ("navigate", "open_flyover"):
                 kind = "escalate"
 
-            # A non-General project with no repo attached has no workspace for the
-            # agent to act in — running it just flails. Reply with setup guidance
-            # instead of escalating.
+            # Block only when there's nothing to act on. A repo gives the agent a
+            # code workspace; a Notion page gives it something to read and log to.
+            # With neither, the agent just flails — so guide setup instead.
             if (kind == "escalate" or tier == "agent") and project_id:
                 proj0 = db.get(Project, project_id)
-                if not proj0 or not proj0.repo_path:
-                    msg = ("This project has no repo attached yet, sir. Use “+ Add project” to point me "
-                           "at its folder; I'll then build in it and keep its docs in Notion.")
+                if not proj0 or (not proj0.repo_path and not proj0.notion_url):
+                    msg = ("This project has nothing attached yet, sir. On the Projects tab, add a repo "
+                           "path (to build code) or a Notion page (to read and keep notes), and I'll work with it.")
                     yield _sse({"type": "text", "text": msg})
                     yield _sse({"type": "done", "text": msg})
                     store.add_turn(db, "assistant", msg, tier=tier, project_id=project_id)
@@ -318,7 +318,9 @@ def stream(body: StreamIn, project_id: int = 0):
                 cwd = proj.repo_path if (proj and proj.repo_path) else None
                 prompt = "\n\n".join(f"{m['role']}: {m['content']}" for m in msgs)
                 context = f"{load_persona()}\n\n{_build_context(db)}"
-                if proj and proj.repo_path:
+                # Inject Notion instructions for any project with a repo OR a Notion
+                # page, so a Notion-only project can still read/log to its page.
+                if proj and (proj.repo_path or proj.notion_url):
                     context += "\n\n" + _notion_instructions(proj)
                 for ev in _agent_stream(prompt, context=context, session_id=state.agent_session_id or None, cwd=cwd):
                     if ev["type"] == "session":

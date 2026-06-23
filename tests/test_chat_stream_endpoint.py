@@ -97,7 +97,29 @@ def test_stream_unconfigured_project_gives_setup_guidance(ctx, monkeypatch):
         raise AssertionError("agent must NOT run for a project with no repo_path")
     monkeypatch.setattr(cr, "_agent_stream", _boom)
     r = client.post(f"/api/chat/stream?project_id={pid}", json={"text": "hi", "tier": "agent"})
-    assert "no repo attached" in r.text   # setup guidance, agent never invoked
+    assert "nothing attached" in r.text   # setup guidance, agent never invoked
+
+
+def test_stream_notion_only_project_runs_agent(ctx, monkeypatch):
+    # A project with a Notion page but no repo should still run the agent (so the
+    # user can chat about / log to the page) — NOT get blocked with setup guidance.
+    client, TS = ctx
+    from backend.modules.projects.models import Project
+    db = TS(); p = Project(name="SSS", notion_url="https://notion.so/p/abc"); db.add(p); db.commit(); pid = p.id
+    monkeypatch.setattr(cr.service, "plan",
+        lambda db, msgs, skill=None, tier=None, extra_context=None: {"kind": "escalate", "reason": "x"})
+    seen = {}
+    def fake_stream(prompt, context="", session_id=None, cwd=None):
+        seen["cwd"] = cwd; seen["ctx"] = context
+        yield {"type": "text", "text": "here's what the page says"}
+        yield {"type": "done", "text": ""}
+    monkeypatch.setattr(cr, "_agent_stream", fake_stream)
+
+    r = client.post(f"/api/chat/stream?project_id={pid}", json={"text": "what can you tell me about this project", "tier": "agent"})
+    assert "nothing attached" not in r.text            # NOT blocked
+    assert "here's what the page says" in r.text        # agent ran
+    assert seen["cwd"] is None                          # no repo -> default cwd
+    assert "Notion documentation log" in seen["ctx"]    # notion instructions injected
 
 
 def test_stream_scopes_project_and_captures_notion_url(ctx, monkeypatch):
