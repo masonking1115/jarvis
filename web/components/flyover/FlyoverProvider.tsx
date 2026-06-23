@@ -92,6 +92,8 @@ export function FlyoverProvider({ children }: { children: ReactNode }) {
       // Don't hijack Esc while typing or when a modal is open (modals handle Esc themselves).
       if (!open && isTypingTarget(document.activeElement)) return;
       if (!open && document.querySelector('[data-modal="true"]')) return;
+      // The fullscreen camera handles its own Esc — don't let it also open the flyover.
+      if (!open && document.querySelector('[data-cam-fullscreen="true"]')) return;
       e.preventDefault();
       setOpen(o => !o);
     }
