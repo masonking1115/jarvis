@@ -125,7 +125,7 @@ export function CameraProvider({ children }: { children: ReactNode }) {
           onClick={() => setExpanded(true)}
           title="Expand camera (Esc or Space to exit)"
           className="fixed bottom-5 left-5 z-[30] block p-0 rounded-xl overflow-hidden border border-[#4ad6ff]/40 shadow-[0_0_24px_rgba(74,214,255,0.25)] cursor-pointer hover:border-[#4ad6ff]/80 transition-colors">
-          <video ref={videoRef} muted playsInline autoPlay className="block w-44 h-auto" />
+          <video ref={videoRef} muted playsInline autoPlay disablePictureInPicture disableRemotePlayback controlsList="nodownload noplaybackrate noremoteplayback" className="block w-44 h-auto" />
           {!ready && (
             <div className="absolute inset-0 grid place-items-center bg-black/50 text-[11px] text-[#9fe6ff]">
               starting camera…
@@ -139,7 +139,7 @@ export function CameraProvider({ children }: { children: ReactNode }) {
         <div data-cam-fullscreen="true" className="fixed inset-0 z-[100] bg-[#04080f] grid-bg">
           <div className="pointer-events-none absolute inset-0"
             style={{ background: "radial-gradient(60% 60% at 50% 50%, rgba(74,214,255,0.08), transparent 70%), radial-gradient(40% 40% at 50% 50%, rgba(74,214,255,0.05), transparent 70%)" }} />
-          <video ref={videoRef} muted playsInline autoPlay className="absolute inset-0 w-full h-full object-cover" />
+          <video ref={videoRef} muted playsInline autoPlay disablePictureInPicture disableRemotePlayback controlsList="nodownload noplaybackrate noremoteplayback" className="absolute inset-0 w-full h-full object-cover" />
           {/* harsh edge taper into the dark grid backdrop */}
           <div className="pointer-events-none absolute inset-0" style={{ boxShadow: "inset 0 0 96px 120px #04080f" }} />
           {/* grid lines on the tapered border */}
