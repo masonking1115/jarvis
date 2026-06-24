@@ -139,7 +139,7 @@ export function CameraProvider({ children }: { children: ReactNode }) {
         <div data-cam-fullscreen="true" className="fixed inset-0 z-[100] bg-[#04080f] grid-bg">
           <div className="pointer-events-none absolute inset-0"
             style={{ background: "radial-gradient(60% 60% at 50% 50%, rgba(74,214,255,0.08), transparent 70%), radial-gradient(40% 40% at 50% 50%, rgba(74,214,255,0.05), transparent 70%)" }} />
-          <video ref={videoRef} muted playsInline autoPlay className="absolute inset-0 w-full h-full object-contain" />
+          <video ref={videoRef} muted playsInline autoPlay className="absolute inset-0 w-full h-full object-cover" />
           {/* harsh edge taper into the dark grid backdrop */}
           <div className="pointer-events-none absolute inset-0" style={{ boxShadow: "inset 0 0 96px 120px #04080f" }} />
           {/* grid lines on the tapered border */}
